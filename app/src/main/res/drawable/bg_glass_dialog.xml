@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- surface_card (#0A1931) with 98% opacity (FA) to block background text while keeping glass aesthetic -->
+    <solid android:color="#FA0A1931" />
+    <corners android:radius="28dp" />
+    <!-- White border for the glass edge effect -->
+    <stroke
+        android:width="1.5dp"
+        android:color="#4DFFFFFF" />
+</shape>
