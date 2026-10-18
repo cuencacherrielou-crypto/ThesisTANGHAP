@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/section_respiratory_bg"
+            android:textColor="@color/text_high_emphasis"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            app:cardBackgroundColor="@android:color/transparent"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_glass_card"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/q_diagnosis"
+                    android:textColor="@color/text_medium_emphasis"
+                    android:textSize="16sp" />
+
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbAsthma" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Asthma" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbCOPD" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="COPD" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbBronchitis" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Bronchitis" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbPneumonia" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Pneumonia" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbAllergies" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Allergies" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+
+                <com.google.android.material.checkbox.MaterialCheckBox
+                    android:id="@+id/cbNone"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:buttonTint="@color/accent_teal"
+                    android:text="None"
+                    android:textColor="@color/text_high_emphasis" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:hint="@string/other_specify"
+                    app:boxStrokeColor="@color/accent_teal"
+                    app:hintTextColor="@color/accent_teal"
+                    app:boxCornerRadiusTopStart="12dp"
+                    app:boxCornerRadiusTopEnd="12dp"
+                    app:boxCornerRadiusBottomStart="12dp"
+                    app:boxCornerRadiusBottomEnd="12dp">
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etOtherCondition"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_high_emphasis"/>
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:hint="@string/q_diagnosis_date"
+                    app:boxStrokeColor="@color/accent_teal"
+                    app:hintTextColor="@color/accent_teal"
+                    app:boxCornerRadiusTopStart="12dp"
+                    app:boxCornerRadiusTopEnd="12dp"
+                    app:boxCornerRadiusBottomStart="12dp"
+                    app:boxCornerRadiusBottomEnd="12dp">
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etDiagnosisDate"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:focusable="false"
+                        android:clickable="true"
+                        android:inputType="date"
+                        android:textColor="@color/text_high_emphasis"/>
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/q_hospitalized"
+                    android:textColor="@color/text_medium_emphasis"
+                    android:textSize="16sp" />
+
+                <RadioGroup
+                    android:id="@+id/rgHospitalized"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+                    <RadioButton android:id="@+id/rbHospYes" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/yes" android:textColor="@color/text_high_emphasis" android:buttonTint="@color/accent_teal"/>
+                    <RadioButton android:id="@+id/rbHospNo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="24dp" android:text="@string/no" android:textColor="@color/text_high_emphasis" android:buttonTint="@color/accent_teal"/>
+                </RadioGroup>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/q_family_history"
+                    android:textColor="@color/text_medium_emphasis"
+                    android:textSize="16sp" />
+
+                <RadioGroup
+                    android:id="@+id/rgFamilyHistory"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+                    <RadioButton android:id="@+id/rbFamilyYes" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/yes" android:textColor="@color/text_high_emphasis" android:buttonTint="@color/accent_teal"/>
+                    <RadioButton android:id="@+id/rbFamilyNo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="24dp" android:text="@string/no" android:textColor="@color/text_high_emphasis" android:buttonTint="@color/accent_teal"/>
+                </RadioGroup>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

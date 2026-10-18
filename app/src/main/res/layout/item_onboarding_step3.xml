@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/section_symptoms"
+            android:textColor="@color/text_high_emphasis"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            app:cardBackgroundColor="@android:color/transparent"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_glass_card"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/q_cough_freq"
+                    android:textColor="@color/text_medium_emphasis"
+                    android:textSize="16sp" />
+
+                <RadioGroup
+                    android:id="@+id/rgCoughFreq"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp">
+                    <RadioButton android:id="@+id/rbCoughDaily" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/cough_daily" android:textColor="@color/text_high_emphasis" android:buttonTint="@color/accent_teal"/>
+                    <RadioButton android:id="@+id/rbCoughWeekly" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/cough_weekly" android:textColor="@color/text_high_emphasis" android:buttonTint="@color/accent_teal"/>
+                    <RadioButton android:id="@+id/rbCoughMonthly" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/cough_monthly" android:textColor="@color/text_high_emphasis" android:buttonTint="@color/accent_teal"/>
+                    <RadioButton android:id="@+id/rbCoughRarely" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/cough_rarely" android:textColor="@color/text_high_emphasis" android:buttonTint="@color/accent_teal"/>
+                </RadioGroup>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/q_cough_type"
+                    android:textColor="@color/text_medium_emphasis"
+                    android:textSize="16sp" />
+
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbDryCough" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Dry cough" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbWetCough" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Wet/productive cough" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbPersistentCough" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Persistent cough" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbWorseningCough" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Worsening cough" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/q_shortness_breath"
+                    android:textColor="@color/text_medium_emphasis"
+                    android:textSize="16sp" />
+
+                <RadioGroup
+                    android:id="@+id/rgShortnessOfBreath"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+                    <RadioButton android:id="@+id/rbShortnessYes" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/yes" android:textColor="@color/text_high_emphasis" android:buttonTint="@color/accent_teal"/>
+                    <RadioButton android:id="@+id/rbShortnessNo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="24dp" android:text="@string/no" android:textColor="@color/text_high_emphasis" android:buttonTint="@color/accent_teal"/>
+                </RadioGroup>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/q_wheezing"
+                    android:textColor="@color/text_medium_emphasis"
+                    android:textSize="16sp" />
+
+                <RadioGroup
+                    android:id="@+id/rgWheezing"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+                    <RadioButton android:id="@+id/rbWheezingYes" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/yes" android:textColor="@color/text_high_emphasis" android:buttonTint="@color/accent_teal"/>
+                    <RadioButton android:id="@+id/rbWheezingNo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="24dp" android:text="@string/no" android:textColor="@color/text_high_emphasis" android:buttonTint="@color/accent_teal"/>
+                </RadioGroup>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/q_triggers"
+                    android:textColor="@color/text_medium_emphasis"
+                    android:textSize="16sp" />
+
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbTriggerDust" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Dust" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbTriggerCold" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Cold weather" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbTriggerSmoke" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Smoke" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbTriggerExercise" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Exercise" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbTriggerStress" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Stress" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbTriggerOdors" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Strong odors" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbTriggerPet" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Pet fur" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+                <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/cbTriggerPollen" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Pollen" android:textColor="@color/text_high_emphasis" app:buttonTint="@color/accent_teal"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

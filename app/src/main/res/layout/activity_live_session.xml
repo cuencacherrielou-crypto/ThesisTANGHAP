@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_main"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bg_main">
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            app:title="TANGHAP AI Monitoring"
+            app:titleTextColor="@color/text_high_emphasis"
+            app:navigationIcon="@drawable/ic_back_white"/>
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- AI-Assisted Assessment Card -->
+            <include layout="@layout/card_ai_assessment"
+                android:id="@+id/aiAssessmentCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"/>
+
+            <!-- Real-time Breathing Metrics -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:cardBackgroundColor="@color/surface_card"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/divider">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Respiration &amp; Effort Status"
+                        android:textColor="@color/text_medium_emphasis"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:textAllCaps="true"/>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center_vertical">
+                        <TextView
+                            android:id="@+id/tvBreathingPattern"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Detecting..."
+                            android:textColor="@color/text_high_emphasis"
+                            android:textSize="22sp"
+                            android:textStyle="bold"/>
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:gravity="end">
+                            <TextView
+                                android:id="@+id/tvBreathingRate"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="-- BPM"
+                                android:textColor="@color/accent_teal"
+                                android:textSize="18sp"
+                                android:textStyle="bold"/>
+                            <TextView
+                                android:id="@+id/tvLiveEffort"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0.0 kPa"
+                                android:textColor="@color/primary_light"
+                                android:textSize="14sp"
+                                android:textStyle="bold"/>
+                            <TextView
+                                android:id="@+id/tvLiveActuations"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0 Actuations"
+                                android:textColor="@color/secondary"
+                                android:textSize="12sp"
+                                android:textStyle="bold"/>
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Inhalation Effort Data Monitoring -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:cardBackgroundColor="@color/surface_card"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/divider">
+                <RelativeLayout android:layout_width="match_parent" android:layout_height="match_parent" android:padding="12dp">
+                    <TextView android:id="@+id/labelBreathing"
+                        android:text="Inhalation Effort (Pressure Waveform)"
+                        android:textColor="@color/primary_light"
+                        android:textStyle="bold"
+                        android:textSize="11sp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"/>
+                    <com.github.mikephil.charting.charts.LineChart
+                        android:id="@+id/chartBreathingPattern"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_below="@id/labelBreathing"
+                        android:layout_marginTop="4dp"/>
+                </RelativeLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Cough Activity -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="160dp"
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:cardBackgroundColor="@color/surface_card"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/divider">
+                <RelativeLayout android:layout_width="match_parent" android:layout_height="match_parent" android:padding="12dp">
+                    <TextView android:id="@+id/labelCough" android:text="Cough Spectral Intensity" android:textColor="@color/error" android:textStyle="bold" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                    <com.github.mikephil.charting.charts.BarChart android:id="@+id/chartCough" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_below="@id/labelCough" android:layout_marginTop="4dp"/>
+                </RelativeLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnEndSession"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="Finish AI Monitoring"
+                android:backgroundTint="@color/error"
+                app:cornerRadius="16dp"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="32dp"/>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

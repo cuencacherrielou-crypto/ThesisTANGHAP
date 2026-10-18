@@ -1,0 +1,32 @@
+[
+  {
+    "type": "DRY",
+    "label": "Possible Dry Cough",
+    "min_intensity": 80,
+    "max_intensity": 180,
+    "max_duration_ms": 500,
+    "description": "Short, sharp cough without significant mucus."
+  },
+  {
+    "type": "WET",
+    "label": "Possible Wet Cough",
+    "min_intensity": 120,
+    "max_intensity": 220,
+    "min_duration_ms": 600,
+    "description": "Heavy, rattling cough suggesting mucus presence."
+  },
+  {
+    "type": "PERSISTENT",
+    "label": "Possible Persistent Cough",
+    "min_intensity": 60,
+    "min_count": 5,
+    "description": "Repetitive coughing episodes detected frequently."
+  },
+  {
+    "type": "SEVERE",
+    "label": "Possible Severe Cough",
+    "min_intensity": 200,
+    "min_duration_ms": 1000,
+    "description": "Extremely high intensity and long duration cough."
+  }
+]

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "871927999948",
+    "project_id": "tanghap-9d861",
+    "storage_bucket": "tanghap-9d861.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:871927999948:android:70ed83f03af57a88f60169",
+        "android_client_info": {
+          "package_name": "com.sti.tanghap"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "871927999948-l4oamqhiqe9ec0p9b0onmc34s753mb42.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sti.tanghap",
+            "certificate_hash": "04f446cc52d1818e02f62feea3bfad8381eb5ee3"
+          }
+        },
+        {
+          "client_id": "871927999948-b5h2gmhsobd26r4h8ck3e6keknm6vsqj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDnlQXRpj1iHUlm_NUHxDwAysFsIQWJT9I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "871927999948-b5h2gmhsobd26r4h8ck3e6keknm6vsqj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark Mode Palette (Midnight Blue / Deep Navy) -->
+    <color name="bg_main">#020617</color>
+    <color name="surface_card">#0F172A</color>
+    <color name="text_high_emphasis">#F8FAFC</color>
+    <color name="text_medium_emphasis">#94A3B8</color>
+    <color name="text_low_emphasis">#475569</color>
+    <color name="divider">#1E293B</color>
+
+    <!-- Theme Accents -->
+    <color name="accent_teal">#38BDF8</color>
+    <color name="accent_teal_glow">#4D38BDF8</color>
+    <color name="secondary">#818CF8</color>
+    <color name="primary_light">#1E293B</color>
+    <color name="primary_dark">#0F172A</color>
+
+    <!-- Semantic Colors -->
+    <color name="error">#F87171</color>
+    <color name="warning">#FBBF24</color>
+    <color name="success">#34D399</color>
+
+    <!-- Glass Components (Dark) -->
+    <color name="surface_glass">#1AFFFFFF</color>
+    <color name="glass_bg">#F20F172A</color>
+    <color name="glass_border">#33FFFFFF</color>
+</resources>

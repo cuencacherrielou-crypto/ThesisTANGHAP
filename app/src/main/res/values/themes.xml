@@ -1,0 +1,43 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Light Theme (Medical White) -->
+    <style name="Theme.Tanghap" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Main Colors -->
+        <item name="colorPrimary">@color/accent_teal</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorPrimaryContainer">@color/primary_light</item>
+        <item name="colorOnPrimaryContainer">@color/accent_teal</item>
+
+        <item name="android:windowBackground">@color/bg_main</item>
+        <item name="android:statusBarColor">@color/bg_main</item>
+        <item name="android:navigationBarColor">@color/bg_main</item>
+        <item name="android:windowLightStatusBar">true</item>
+
+        <!-- UI Surfaces -->
+        <item name="colorSurface">@color/surface_card</item>
+        <item name="colorOnSurface">@color/text_high_emphasis</item>
+        <item name="colorSurfaceVariant">@color/surface_glass</item>
+        <item name="colorOnSurfaceVariant">@color/text_medium_emphasis</item>
+
+        <item name="colorOutline">@color/divider</item>
+
+        <!-- Components -->
+        <item name="android:datePickerDialogTheme">@style/Theme.Tanghap.DatePickerDialog</item>
+        <item name="android:dialogTheme">@style/Theme.Tanghap.Dialog</item>
+        <item name="android:textColorPrimary">@color/text_high_emphasis</item>
+        <item name="android:textColorSecondary">@color/text_medium_emphasis</item>
+    </style>
+
+    <style name="Theme.Tanghap.Dialog" parent="Theme.Material3.DayNight.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="colorSurface">@color/surface_card</item>
+        <item name="colorOnSurface">@color/text_high_emphasis</item>
+    </style>
+
+    <style name="Theme.Tanghap.DatePickerDialog" parent="ThemeOverlay.Material3.MaterialCalendar">
+        <item name="android:windowBackground">@drawable/bg_glass_dialog</item>
+        <item name="colorSurface">@color/surface_card</item>
+        <item name="colorOnSurface">@color/text_high_emphasis</item>
+        <item name="colorPrimary">@color/accent_teal</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+    </style>
+</resources>
