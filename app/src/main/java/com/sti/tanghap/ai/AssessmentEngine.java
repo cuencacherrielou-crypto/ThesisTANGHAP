@@ -50,7 +50,19 @@ public class AssessmentEngine {
             result.otcCategory = "Early Detection of Asthma";
             result.recommendHospital = true; // Shows hospital button for emergency response
         }
-        // 3. BRONCHITIS PATTERN RECOGNITION (Wet / Persistent Cough + Elevated Breathing)
+        // 3. COPD-RELATED PATTERN (COPD Baseline + Frequent/Wet Cough or Rapid Breathing)
+        else if (hasHistoryOfCOPD &&
+                (coughType == CoughAnalyzer.CoughType.FREQUENT
+                        || coughType == CoughAnalyzer.CoughType.WET
+                        || breathing.bpm > 20)) {
+            result.possibleFindings.add("Respiratory patterns possibly associated with COPD-related changes.");
+            result.observations.add("Frequent or productive coughing, or an elevated breathing rate, detected in a user with a COPD history.");
+            result.observations.add("Changes may indicate increased airway irritation compared with the user's usual pattern.");
+            result.otcCategory = "COPD Assessment";
+            result.recommendClinic = true;
+            result.recommendHospital = false; // Hospital button stays for pneumonia-like findings only
+        }
+        // 4. BRONCHITIS PATTERN RECOGNITION (Wet / Persistent Cough + Elevated Breathing)
         else if (predictedCough.contains("wet") || predictedCough.contains("persistent") ||
                 coughType == CoughAnalyzer.CoughType.WET || breathing.bpm > 18) {
             result.possibleFindings.add("Possible respiratory patterns associated with bronchitis-related observations.");
@@ -61,7 +73,7 @@ public class AssessmentEngine {
             result.recommendPharmacy = true;
             result.recommendHospital = false; // Hospital button hidden for mild bronchitis
         }
-        // 4. STANDARD RESPIRATORY EVALUATION (Default / Stable Baseline)
+        // 5. STANDARD RESPIRATORY EVALUATION (Default / Stable Baseline)
         else {
             result.possibleFindings.add("Respiratory metrics remain within baseline parameters.");
             result.observations.add("Normal breathing rhythm and standard acoustic spectral profile detected.");
@@ -77,7 +89,7 @@ public class AssessmentEngine {
             result.recommendHospital = false;
         }
 
-        // 5. SUMMARY INSIGHT GENERATION
+        // 6. SUMMARY INSIGHT GENERATION
         StringBuilder sb = new StringBuilder();
         sb.append("Assessment Summary: ");
         if (result.possibleFindings.isEmpty()) {
