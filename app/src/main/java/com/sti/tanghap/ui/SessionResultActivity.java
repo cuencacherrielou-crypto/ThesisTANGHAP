@@ -34,7 +34,7 @@ public class SessionResultActivity extends AppCompatActivity {
     private final SimpleDateFormat sdf = new SimpleDateFormat("MMMM dd, yyyy 'at' hh:mm a", Locale.getDefault());
     private final BaselineCalculator baselineCalculator = new BaselineCalculator();
 
-    private TextView tvAvgBpm, tvPeak, tvInhaleDur, tvCough, tvAct, tvDate, tvChestMovement;
+    private TextView tvAvgBpm, tvPeak, tvInhaleDur, tvCough, tvAct, tvDate;
     private TextView tvAiFindings, tvAiObservations, tvOtcRecommendation, tvBaselineComparison;
     private View layoutOtc;
     private MaterialButton btnNearbyHospitals;
@@ -58,7 +58,6 @@ public class SessionResultActivity extends AppCompatActivity {
         tvCough = findViewById(R.id.tvCough);
         tvAct = findViewById(R.id.tvAct);
         tvDate = findViewById(R.id.tvDate);
-        tvChestMovement = findViewById(R.id.tvChestMovement);
 
         // AI Integrated UI
         tvAiFindings = findViewById(R.id.tvAiFindings);
@@ -120,7 +119,6 @@ public class SessionResultActivity extends AppCompatActivity {
         long startMillis = getIntent().getLongExtra("startTimeMillis", System.currentTimeMillis());
         long endMillis = getIntent().getLongExtra("endTimeMillis", System.currentTimeMillis());
         long inhaleMillis = getIntent().getLongExtra("inhaleDurationMillis", 0L);
-        String chestMovement = getIntent().getStringExtra("chestMovement");
         boolean riskHigh = getIntent().getBooleanExtra("riskLevelHigh", false);
         String otcRecommendation = getIntent().getStringExtra("otcRecommendation");
 
@@ -142,7 +140,6 @@ public class SessionResultActivity extends AppCompatActivity {
             newSession.startTimeMillis = startMillis;
             newSession.endTimeMillis = endMillis;
             newSession.inhaleDurationMillis = inhaleMillis;
-            newSession.chestMovement = chestMovement;
             newSession.riskLevelHigh = riskHigh;
             newSession.otcRecommendation = otcRecommendation;
             newSession.peakPressureKpa = maxEffort;
@@ -218,9 +215,6 @@ public class SessionResultActivity extends AppCompatActivity {
         // Dynamic UI render for Actuations Count
         tvAct.setText(String.valueOf(session.actuationCount));
         tvAvgBpm.setText(session.averageBpm > 0 ? session.averageBpm + " BPM" : "-- BPM");
-        if (tvChestMovement != null) {
-            tvChestMovement.setText(session.chestMovement != null ? session.chestMovement : "Not measured");
-        }
     }
 
     private void displayAiAssessment(SessionEntity session) {

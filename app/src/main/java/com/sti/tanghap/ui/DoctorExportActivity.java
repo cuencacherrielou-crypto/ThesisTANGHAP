@@ -106,8 +106,6 @@ public class DoctorExportActivity extends AppCompatActivity {
             canvas.drawText("- Average Breathing Rate: " + (session.averageBpm > 0 ? session.averageBpm + " breaths/min" : "not measured"), 70, y, paint);
             y += 25;
             canvas.drawText("- Breathing Pattern: " + (session.detectedPattern != null ? session.detectedPattern : "not available"), 70, y, paint);
-            y += 25;
-            canvas.drawText("- Chest Movement: " + (session.chestMovement != null ? session.chestMovement : "not measured"), 70, y, paint);
 
             y += 40;
             paint.setFakeBoldText(true);

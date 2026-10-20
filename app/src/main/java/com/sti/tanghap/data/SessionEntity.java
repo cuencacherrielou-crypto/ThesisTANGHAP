@@ -32,7 +32,6 @@ public class SessionEntity {
     public String baselineComparison; // e.g., "10% higher than baseline"
 
     public String recommendation;
-    public String chestMovement; // e.g. "Normal chest movement", from effort + inhalation duration
 
     public SessionEntity(@NonNull String id) {
         this.id = id;

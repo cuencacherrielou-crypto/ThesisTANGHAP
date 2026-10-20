@@ -6,7 +6,6 @@ import static org.junit.Assert.assertTrue;
 
 import com.sti.tanghap.ai.AssessmentEngine;
 import com.sti.tanghap.ai.BreathingAnalyzer;
-import com.sti.tanghap.domain.ChestMovementAnalyzer;
 import com.sti.tanghap.domain.CoughAnalyzer;
 import com.sti.tanghap.domain.DoseReminder;
 import com.sti.tanghap.domain.InhalationTracker;
@@ -75,24 +74,6 @@ public class PanelRevisionLogicTest {
         t.finish();
         assertEquals(0, t.getInhalationCount());
         assertEquals(0, t.getAverageInhaleMillis());
-    }
-
-    // ---------- Chest movement ----------
-
-    @Test
-    public void chestMovement_classifiesDepth() {
-        ChestMovementAnalyzer a = new ChestMovementAnalyzer();
-        assertEquals(ChestMovementAnalyzer.Depth.NONE, a.analyze(0, 0).depth);
-        assertEquals(ChestMovementAnalyzer.Depth.SHALLOW, a.analyze(1000, 3f).depth);
-        assertEquals(ChestMovementAnalyzer.Depth.NORMAL, a.analyze(2000, 3f).depth);
-        assertEquals(ChestMovementAnalyzer.Depth.DEEP, a.analyze(3500, 3f).depth);
-    }
-
-    @Test
-    public void chestMovement_flagsWeakEffort() {
-        ChestMovementAnalyzer.Result r = new ChestMovementAnalyzer().analyze(2000, 1.6f);
-        assertTrue(r.weakEffort);
-        assertEquals("Normal chest movement (weak effort)", r.label);
     }
 
     // ---------- Missed / late doses ----------

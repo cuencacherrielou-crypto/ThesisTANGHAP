@@ -105,7 +105,6 @@ public class SessionRepository {
                                 s.actuationCount = act != null ? act.intValue() : 0;
                                 Long inhale = doc.getLong("inhaleDurationMillis");
                                 s.inhaleDurationMillis = inhale != null ? inhale : 0;
-                                s.chestMovement = doc.getString("chestMovement");
                                 s.otcRecommendation = doc.getString("otcRecommendation");
                                 Boolean risk = doc.getBoolean("riskLevelHigh");
                                 s.riskLevelHigh = risk != null && risk;
@@ -138,7 +137,6 @@ public class SessionRepository {
         data.put("riskLevelHigh", s.riskLevelHigh);
         data.put("baselineComparison", s.baselineComparison);
         data.put("recommendation", s.recommendation);
-        data.put("chestMovement", s.chestMovement);
         
         return data;
     }

@@ -33,7 +33,6 @@ import com.sti.tanghap.ble.ble.BleDeviceItem;
 import com.sti.tanghap.ble.ble.BleListener;
 import com.sti.tanghap.ble.ble.BleManager;
 import com.sti.tanghap.data.ConnectionLog;
-import com.sti.tanghap.domain.ChestMovementAnalyzer;
 import com.sti.tanghap.domain.CoughAnalyzer;
 import com.sti.tanghap.domain.InhalationTracker;
 import com.sti.tanghap.notify.NotificationHelper;
@@ -72,13 +71,11 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
     private View layoutOtc;
     private MaterialButton btnNearbyHospitals;
     private MaterialButton btnCallEmergency;
-    private TextView tvChestMovement;
     private AiCoughClassifier aiCoughClassifier;
     private final BreathingAnalyzer breathingAnalyzer = new BreathingAnalyzer();
     private final AssessmentEngine assessmentEngine = new AssessmentEngine();
     private final CoughAnalyzer coughAnalyzer = new CoughAnalyzer();
     private final InhalationTracker inhalationTracker = new InhalationTracker();
-    private final ChestMovementAnalyzer chestMovementAnalyzer = new ChestMovementAnalyzer();
     private AssessmentEngine.AssessmentResult lastAssessment;
     private String lastOtcLabel;
     private long sessionStartMillis;
@@ -166,7 +163,6 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
         layoutOtc = findViewById(R.id.layoutOtc);
         btnNearbyHospitals = findViewById(R.id.btnNearbyHospitals);
         btnCallEmergency = findViewById(R.id.btnCallEmergency);
-        tvChestMovement = findViewById(R.id.tvChestMovement);
 
         chartBreathing = findViewById(R.id.chartBreathingPattern);
         chartCough = findViewById(R.id.chartCough);
@@ -213,8 +209,6 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
             ble.disconnect();
         }
         inhalationTracker.finish();
-        ChestMovementAnalyzer.Result chest = chestMovementAnalyzer.analyze(
-                inhalationTracker.getAverageInhaleMillis(), inhalationTracker.getPeakEffortKpa());
 
         saveSessionToPreferences();
 
@@ -229,7 +223,6 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
         intent.putExtra("startTimeMillis", sessionStartMillis);
         intent.putExtra("endTimeMillis", System.currentTimeMillis());
         intent.putExtra("inhaleDurationMillis", inhalationTracker.getAverageInhaleMillis());
-        intent.putExtra("chestMovement", chest.label);
         intent.putExtra("riskLevelHigh", hasPredicted && lastAssessment != null && lastAssessment.recommendHospital);
         if (hasPredicted && lastOtcLabel != null) intent.putExtra("otcRecommendation", lastOtcLabel);
 
@@ -365,12 +358,6 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
                 br, ct, hasPredicted ? aiCoughLabel : null, baselineAsthma, baselineCOPD, baselineCongestion);
         lastAssessment = assessment;
         if (hasPredicted) lastOtcLabel = conditionIndication;
-
-        ChestMovementAnalyzer.Result chest = chestMovementAnalyzer.analyze(
-                inhalationTracker.getAverageInhaleMillis(), inhalationTracker.getPeakEffortKpa());
-        if (tvChestMovement != null) {
-            tvChestMovement.setText("Chest movement: " + chest.label);
-        }
 
         if (tvAiFindings != null) {
             tvAiFindings.setText(aiCoughLabel);
