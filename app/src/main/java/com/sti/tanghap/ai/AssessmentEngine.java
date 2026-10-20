@@ -98,10 +98,8 @@ public class AssessmentEngine {
         else {
             result.possibleFindings.add("Respiratory metrics remain within baseline parameters.");
             result.observations.add("Normal breathing rhythm and standard acoustic spectral profile detected.");
-            if (hasMildCongestion) {
-                result.otcCategory = "Antihistamines (for mild congestion)";
-                result.recommendPharmacy = true;
-            } else if (coughType == CoughAnalyzer.CoughType.DRY) {
+            // Allergies are background information only; OTC guidance is given for coughs only.
+            if (coughType == CoughAnalyzer.CoughType.DRY) {
                 result.otcCategory = "Cough Suppressants (for non-productive cough)";
                 result.recommendPharmacy = true;
             } else {

@@ -55,4 +55,12 @@ public class AssessmentEngineTest {
                 bpm(16), CoughAnalyzer.CoughType.NORMAL, false, true, false);
         assertEquals("Standard Respiratory Evaluation", r.otcCategory);
     }
+
+    @Test
+    public void allergyHistory_doesNotRecommendMedicine() {
+        AssessmentEngine.AssessmentResult r = engine.generatePreliminaryAssessment(
+                bpm(16), CoughAnalyzer.CoughType.NORMAL, false, false, true);
+        assertEquals("Standard Respiratory Evaluation", r.otcCategory);
+        assertFalse(r.recommendPharmacy);
+    }
 }
