@@ -34,10 +34,11 @@ public class SessionResultActivity extends AppCompatActivity {
     private final SimpleDateFormat sdf = new SimpleDateFormat("MMMM dd, yyyy 'at' hh:mm a", Locale.getDefault());
     private final BaselineCalculator baselineCalculator = new BaselineCalculator();
 
-    private TextView tvAvgBpm, tvPeak, tvInhaleDur, tvCough, tvAct, tvDate;
+    private TextView tvAvgBpm, tvPeak, tvInhaleDur, tvCough, tvAct, tvDate, tvChestMovement;
     private TextView tvAiFindings, tvAiObservations, tvOtcRecommendation, tvBaselineComparison;
     private View layoutOtc;
     private MaterialButton btnNearbyHospitals;
+    private MaterialButton btnCallEmergency;
     private LineChart chartResultPattern;
     private String currentSessionId;
 
@@ -57,6 +58,7 @@ public class SessionResultActivity extends AppCompatActivity {
         tvCough = findViewById(R.id.tvCough);
         tvAct = findViewById(R.id.tvAct);
         tvDate = findViewById(R.id.tvDate);
+        tvChestMovement = findViewById(R.id.tvChestMovement);
 
         // AI Integrated UI
         tvAiFindings = findViewById(R.id.tvAiFindings);
@@ -65,6 +67,7 @@ public class SessionResultActivity extends AppCompatActivity {
         tvBaselineComparison = findViewById(R.id.tvBaselineComparison);
         layoutOtc = findViewById(R.id.layoutOtc);
         btnNearbyHospitals = findViewById(R.id.btnNearbyHospitals);
+        btnCallEmergency = findViewById(R.id.btnCallEmergency);
 
         chartResultPattern = findViewById(R.id.chartResultPattern);
 
@@ -114,6 +117,12 @@ public class SessionResultActivity extends AppCompatActivity {
         // EXTRACT SENSOR METRICS FROM INTENT EXTRAS
         int actuationCount = getIntent().getIntExtra("actuationCount", 0);
         int coughCount = getIntent().getIntExtra("coughCount", 0);
+        long startMillis = getIntent().getLongExtra("startTimeMillis", System.currentTimeMillis());
+        long endMillis = getIntent().getLongExtra("endTimeMillis", System.currentTimeMillis());
+        long inhaleMillis = getIntent().getLongExtra("inhaleDurationMillis", 0L);
+        String chestMovement = getIntent().getStringExtra("chestMovement");
+        boolean riskHigh = getIntent().getBooleanExtra("riskLevelHigh", false);
+        String otcRecommendation = getIntent().getStringExtra("otcRecommendation");
 
         if (breathingRateStr != null || aiFindings != null) {
             int bpmVal = 0;
@@ -130,7 +139,12 @@ public class SessionResultActivity extends AppCompatActivity {
                 newSession.userId = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser().getUid();
             }
 
-            newSession.startTimeMillis = System.currentTimeMillis();
+            newSession.startTimeMillis = startMillis;
+            newSession.endTimeMillis = endMillis;
+            newSession.inhaleDurationMillis = inhaleMillis;
+            newSession.chestMovement = chestMovement;
+            newSession.riskLevelHigh = riskHigh;
+            newSession.otcRecommendation = otcRecommendation;
             newSession.peakPressureKpa = maxEffort;
             newSession.averageBpm = bpmVal;
             newSession.detectedPattern = breathingPattern != null ? breathingPattern : "Normal";
@@ -204,6 +218,9 @@ public class SessionResultActivity extends AppCompatActivity {
         // Dynamic UI render for Actuations Count
         tvAct.setText(String.valueOf(session.actuationCount));
         tvAvgBpm.setText(session.averageBpm > 0 ? session.averageBpm + " BPM" : "-- BPM");
+        if (tvChestMovement != null) {
+            tvChestMovement.setText(session.chestMovement != null ? session.chestMovement : "Not measured");
+        }
     }
 
     private void displayAiAssessment(SessionEntity session) {
@@ -224,6 +241,7 @@ public class SessionResultActivity extends AppCompatActivity {
             btnNearbyHospitals.setVisibility(View.GONE);
             tvAiFindings.setTextColor(ContextCompat.getColor(this, R.color.text_high_emphasis));
         }
+        EmergencyContactButton.bind(this, btnCallEmergency, session.riskLevelHigh);
     }
 
     private void displayBaselineComparison(SessionEntity session, BaselineCalculator.Baseline baseline) {

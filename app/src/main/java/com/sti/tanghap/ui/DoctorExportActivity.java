@@ -102,6 +102,22 @@ public class DoctorExportActivity extends AppCompatActivity {
             canvas.drawText("- Cough Events: " + session.coughCount, 70, y, paint);
             y += 25;
             canvas.drawText("- Actuations: " + session.actuationCount, 70, y, paint);
+            y += 25;
+            canvas.drawText("- Average Breathing Rate: " + (session.averageBpm > 0 ? session.averageBpm + " breaths/min" : "not measured"), 70, y, paint);
+            y += 25;
+            canvas.drawText("- Breathing Pattern: " + (session.detectedPattern != null ? session.detectedPattern : "not available"), 70, y, paint);
+            y += 25;
+            canvas.drawText("- Chest Movement: " + (session.chestMovement != null ? session.chestMovement : "not measured"), 70, y, paint);
+
+            y += 40;
+            paint.setFakeBoldText(true);
+            canvas.drawText("Preliminary AI-Assisted Assessment:", 50, y, paint);
+            paint.setFakeBoldText(false);
+            y = drawWrapped(canvas, paint, "Findings: " + (session.aiPreliminaryInsight != null ? session.aiPreliminaryInsight : "none"), 70, y + 25, 475, 740);
+            y = drawWrapped(canvas, paint, "Observations: " + (session.aiObservations != null ? session.aiObservations : "none"), 70, y + 5, 475, 740);
+            if (session.otcRecommendation != null) {
+                y = drawWrapped(canvas, paint, "Indication: " + session.otcRecommendation, 70, y + 5, 475, 740);
+            }
 
             // Footer / Disclaimer
             y = 780;
@@ -131,5 +147,27 @@ public class DoctorExportActivity extends AppCompatActivity {
                 document.close();
             }
         });
+    }
+
+    /** Draws text wrapped to maxWidth and returns the y of the next line; stops at maxY. */
+    private int drawWrapped(Canvas canvas, Paint paint, String text, int x, int y, int maxWidth, int maxY) {
+        String[] words = text.split(" ");
+        StringBuilder line = new StringBuilder();
+        for (String word : words) {
+            String candidate = line.length() == 0 ? word : line + " " + word;
+            if (paint.measureText(candidate) > maxWidth && line.length() > 0) {
+                if (y > maxY) return y;
+                canvas.drawText(line.toString(), x, y, paint);
+                y += 20;
+                line = new StringBuilder(word);
+            } else {
+                line = new StringBuilder(candidate);
+            }
+        }
+        if (line.length() > 0 && y <= maxY) {
+            canvas.drawText(line.toString(), x, y, paint);
+            y += 20;
+        }
+        return y;
     }
 }

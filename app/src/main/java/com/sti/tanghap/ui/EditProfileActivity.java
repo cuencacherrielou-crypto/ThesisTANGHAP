@@ -11,6 +11,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.sti.tanghap.R;
+import com.sti.tanghap.data.ProfilePrefs;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -20,6 +21,8 @@ public class EditProfileActivity extends AppCompatActivity {
 
     private TextInputEditText etFullName, etUsername, etAge, etBirthday;
     private TextInputEditText etInhalerType, etInhalerUsage;
+    private TextInputEditText etPrescribedDoses, etMedications, etAllergyDetails;
+    private TextInputEditText etEmergencyName, etEmergencyRelation, etEmergencyPhone;
     private MaterialCheckBox cbAsthma, cbCOPD, cbBronchitis, cbPneumonia, cbAllergies, cbSmoke;
     private View progress;
     private FirebaseFirestore db;
@@ -48,6 +51,12 @@ public class EditProfileActivity extends AppCompatActivity {
 
         etInhalerType = findViewById(R.id.etInhalerType);
         etInhalerUsage = findViewById(R.id.etInhalerUsage);
+        etPrescribedDoses = findViewById(R.id.etPrescribedDoses);
+        etMedications = findViewById(R.id.etMedications);
+        etAllergyDetails = findViewById(R.id.etAllergyDetails);
+        etEmergencyName = findViewById(R.id.etEmergencyName);
+        etEmergencyRelation = findViewById(R.id.etEmergencyRelation);
+        etEmergencyPhone = findViewById(R.id.etEmergencyPhone);
 
         progress = findViewById(R.id.progress);
 
@@ -85,6 +94,14 @@ public class EditProfileActivity extends AppCompatActivity {
                             etInhalerUsage.setText((String) healthMap.get("inhalerUsageFreqPerDay"));
                             Boolean smoke = (Boolean) healthMap.get("isSmokerOrVaper");
                             if (smoke != null) cbSmoke.setChecked(smoke);
+                            Object doses = healthMap.get("prescribedDosesPerDay");
+                            if (doses instanceof Number && ((Number) doses).intValue() > 0) {
+                                etPrescribedDoses.setText(String.valueOf(((Number) doses).intValue()));
+                            }
+                            Object meds = healthMap.get("medications");
+                            if (meds != null) etMedications.setText(String.valueOf(meds));
+                            Object allergy = healthMap.get("allergyDetails");
+                            if (allergy != null) etAllergyDetails.setText(String.valueOf(allergy));
                         } else {
                             SharedPreferences pref = getSharedPreferences("TanghapUserPreferences", MODE_PRIVATE);
                             cbAsthma.setChecked(pref.getBoolean("has_asthma", false));
@@ -92,6 +109,17 @@ public class EditProfileActivity extends AppCompatActivity {
                             cbBronchitis.setChecked(pref.getBoolean("has_bronchitis", false));
                             cbAllergies.setChecked(pref.getBoolean("has_congestion", false));
                             etInhalerUsage.setText(pref.getString("inhaler_usage", ""));
+                        }
+
+                        Map<String, Object> contact = (Map<String, Object>) documentSnapshot.get("emergencyContact");
+                        if (contact != null) {
+                            etEmergencyName.setText((String) contact.get("name"));
+                            etEmergencyRelation.setText((String) contact.get("relation"));
+                            etEmergencyPhone.setText((String) contact.get("phone"));
+                        } else {
+                            etEmergencyName.setText(ProfilePrefs.emergencyName(this));
+                            etEmergencyRelation.setText(ProfilePrefs.emergencyRelation(this));
+                            etEmergencyPhone.setText(ProfilePrefs.emergencyPhone(this));
                         }
                     }
                 })
@@ -120,6 +148,21 @@ public class EditProfileActivity extends AppCompatActivity {
         boolean isSmoke = cbSmoke.isChecked();
         String inhalerType = safe(etInhalerType);
         String inhalerUsage = safe(etInhalerUsage);
+        int prescribedDoses = ProfilePrefs.parseDoses(safe(etPrescribedDoses));
+        String medications = safe(etMedications);
+        String allergyDetails = safe(etAllergyDetails);
+        String emergencyName = safe(etEmergencyName);
+        String emergencyRelation = safe(etEmergencyRelation);
+        String emergencyPhone = safe(etEmergencyPhone).replaceAll("[^0-9+]", "");
+
+        if (!emergencyPhone.isEmpty() && emergencyPhone.length() < 7) {
+            Toast.makeText(this, "Please enter a valid emergency contact number.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (!emergencyPhone.isEmpty() && emergencyName.isEmpty()) {
+            Toast.makeText(this, "Please enter the emergency contact's name.", Toast.LENGTH_SHORT).show();
+            return;
+        }
 
         setLoading(true);
 
@@ -131,6 +174,11 @@ public class EditProfileActivity extends AppCompatActivity {
         editor.putBoolean("has_bronchitis", hasBronchitis);
         editor.putBoolean("has_congestion", hasAllergies);
         editor.putString("inhaler_usage", inhalerUsage);
+        editor.putInt(ProfilePrefs.KEY_PRESCRIBED_DOSES, prescribedDoses);
+        editor.putString(ProfilePrefs.KEY_MEDICATIONS, medications);
+        editor.putString(ProfilePrefs.KEY_EMERGENCY_NAME, emergencyName);
+        editor.putString(ProfilePrefs.KEY_EMERGENCY_RELATION, emergencyRelation);
+        editor.putString(ProfilePrefs.KEY_EMERGENCY_PHONE, emergencyPhone);
         editor.apply();
 
         // 2. Update Firestore document
@@ -141,18 +189,26 @@ public class EditProfileActivity extends AppCompatActivity {
         if (hasPneumonia) conditions.add("Pneumonia");
         if (hasAllergies) conditions.add("Allergies");
 
-        Map<String, Object> healthMap = new HashMap<>();
-        healthMap.put("diagnosedConditions", conditions);
-        healthMap.put("currentInhalerType", inhalerType);
-        healthMap.put("inhalerUsageFreqPerDay", inhalerUsage);
-        healthMap.put("isSmokerOrVaper", isSmoke);
+        Map<String, Object> contact = new HashMap<>();
+        contact.put("name", emergencyName);
+        contact.put("relation", emergencyRelation);
+        contact.put("phone", emergencyPhone);
 
+        // Dotted keys update only these fields, so the other onboarding answers
+        // stored in healthProfile are kept.
         Map<String, Object> updates = new HashMap<>();
         updates.put("fullName", name);
         updates.put("username", username);
         updates.put("age", age);
         updates.put("birthday", birthday);
-        updates.put("healthProfile", healthMap);
+        updates.put("healthProfile.diagnosedConditions", conditions);
+        updates.put("healthProfile.currentInhalerType", inhalerType);
+        updates.put("healthProfile.inhalerUsageFreqPerDay", inhalerUsage);
+        updates.put("healthProfile.isSmokerOrVaper", isSmoke);
+        updates.put("healthProfile.prescribedDosesPerDay", prescribedDoses);
+        updates.put("healthProfile.medications", medications);
+        updates.put("healthProfile.allergyDetails", allergyDetails);
+        updates.put("emergencyContact", contact);
 
         db.collection("users").document(user.getUid()).update(updates)
                 .addOnSuccessListener(aVoid -> {

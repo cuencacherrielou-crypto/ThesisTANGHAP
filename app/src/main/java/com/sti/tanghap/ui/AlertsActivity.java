@@ -8,7 +8,11 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.android.material.button.MaterialButton;
 import com.sti.tanghap.R;
+import com.sti.tanghap.data.ConnectionLog;
+import com.sti.tanghap.domain.DoseReminder;
+import com.sti.tanghap.notify.DoseCheck;
 import com.sti.tanghap.data.AppDatabase;
 import com.sti.tanghap.data.SessionEntity;
 import com.sti.tanghap.domain.AlertEngine;
@@ -17,12 +21,16 @@ import com.sti.tanghap.ui.adapter.AlertAdapter;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
+import java.util.Locale;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class AlertsActivity extends AppCompatActivity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private RecyclerView rvAlerts;
+    private MaterialButton btnCallEmergency;
     private FirebaseFirestore db;
     private FirebaseAuth auth;
 
@@ -40,6 +48,7 @@ public class AlertsActivity extends AppCompatActivity {
 
         rvAlerts = findViewById(R.id.rvAlerts);
         rvAlerts.setLayoutManager(new LinearLayoutManager(this));
+        btnCallEmergency = findViewById(R.id.btnCallEmergency);
 
         loadUserAndAlerts();
     }
@@ -69,7 +78,8 @@ public class AlertsActivity extends AppCompatActivity {
 
     private void loadAlerts(int userAge) {
         executor.execute(() -> {
-            List<SessionEntity> allSessions = AppDatabase.getInstance(this).sessionDao().getAll();
+            String uid = auth.getCurrentUser() != null ? auth.getCurrentUser().getUid() : "";
+            List<SessionEntity> allSessions = AppDatabase.getInstance(this).sessionDao().getAllForUser(uid);
             
             // Logic for baseline (last 7 days)
             long now = System.currentTimeMillis();
@@ -100,9 +110,48 @@ public class AlertsActivity extends AppCompatActivity {
                 todayBpm = latest.averageBpm;
             }
 
-            List<AlertEngine.Alert> alerts = new AlertEngine().evaluate(
+            List<AlertEngine.Alert> alerts = new ArrayList<>();
+
+            // Worsening finding from the most recent session
+            if (!allSessions.isEmpty() && allSessions.get(0).riskLevelHigh) {
+                SessionEntity latest = allSessions.get(0);
+                alerts.add(new AlertEngine.Alert(
+                        "Worsening respiratory pattern",
+                        (latest.otcRecommendation != null ? latest.otcRecommendation + ": " : "")
+                                + "your last session suggests a worsening condition. Contact your emergency contact or visit the nearest hospital if symptoms continue. This is not a diagnosis.",
+                        "WARN"
+                ));
+            }
+
+            alerts.addAll(new AlertEngine().evaluate(
                     baseline, userAge, todayBpm, todayPeak, todayInhale, todayCough, todayAct
-            );
+            ));
+
+            // Late or missed inhaler doses
+            DoseReminder.Result dose = DoseCheck.checkToday(this);
+            if (dose.status != DoseReminder.Status.NONE) {
+                alerts.add(new AlertEngine.Alert(dose.title, dose.message,
+                        dose.status == DoseReminder.Status.MISSED ? "WARN" : "INFO"));
+            }
+
+            // Device connection issues in the last 24 hours
+            List<Long> drops = ConnectionLog.since(this, now - 24L * 60 * 60 * 1000);
+            if (!drops.isEmpty()) {
+                SimpleDateFormat timeFmt = new SimpleDateFormat("hh:mm a", Locale.getDefault());
+                alerts.add(new AlertEngine.Alert(
+                        "Device connection issue",
+                        "The TANGHAP device lost its Bluetooth connection " + drops.size()
+                                + (drops.size() == 1 ? " time" : " times") + " in the last 24 hours (latest at "
+                                + timeFmt.format(new Date(drops.get(0))) + "). Keep your phone within range and check the device battery.",
+                        "INFO"
+                ));
+            }
+
+            boolean hasWarning = false;
+            for (AlertEngine.Alert a : alerts) {
+                if ("WARN".equals(a.severity)) { hasWarning = true; break; }
+            }
+            final boolean showEmergency = hasWarning;
 
             if (alerts.isEmpty()) {
                 alerts.add(new AlertEngine.Alert(
@@ -115,6 +164,7 @@ public class AlertsActivity extends AppCompatActivity {
             List<AlertEngine.Alert> finalAlerts = alerts;
             runOnUiThread(() -> {
                 rvAlerts.setAdapter(new AlertAdapter(finalAlerts));
+                EmergencyContactButton.bind(this, btnCallEmergency, showEmergency);
             });
         });
     }
