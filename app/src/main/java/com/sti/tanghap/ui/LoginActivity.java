@@ -18,7 +18,6 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import com.facebook.AccessToken;
@@ -170,11 +169,7 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     private void showTermsDialog() {
-        new AlertDialog.Builder(this)
-                .setTitle("Terms and Privacy Policy")
-                .setMessage("TANGHAP respects your privacy. All sensor data is stored securely and used only for providing trend analytics. We do not provide medical diagnosis. By using this app, you agree to our data processing practices.")
-                .setPositiveButton("I Understand", null)
-                .show();
+        PrivacyPolicy.showDialog(this);
     }
 
     private void setupFacebookSignIn() {

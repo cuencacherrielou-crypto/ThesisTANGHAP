@@ -1,9 +1,7 @@
 package com.sti.tanghap.ai;
 
-import com.sti.tanghap.domain.CoughAnalyzer;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Advanced Non-diagnostic AI logic for respiratory assessment.
@@ -17,9 +15,6 @@ public class AssessmentEngine {
     public static final String CATEGORY_COPD = "COPD Assessment";
     public static final String CATEGORY_BRONCHITIS = "Bronchitis Pattern Recognition";
     public static final String CATEGORY_STANDARD = "Standard Respiratory Evaluation";
-
-    /** Passed as recentCoughCount when the caller does not track cough episodes. */
-    private static final int UNKNOWN_COUGH_COUNT = -1;
 
     public static class AssessmentResult {
         public List<String> possibleFindings = new ArrayList<>();
@@ -36,59 +31,29 @@ public class AssessmentEngine {
         public AssessmentResult() {}
     }
 
-    public AssessmentResult generatePreliminaryAssessment(
-            BreathingAnalyzer.BreathingResult breathing,
-            CoughAnalyzer.CoughType coughType,
-            boolean hasHistoryOfAsthma,
-            boolean hasHistoryOfCOPD,
-            boolean hasMildCongestion) {
-        return generatePreliminaryAssessment(breathing, coughType, null,
-                hasHistoryOfAsthma, hasHistoryOfCOPD, hasMildCongestion);
-    }
-
     /**
-     * @param serverSoundLabel the label returned by the Flask sound classifier
-     *                         (for example "wheezing", "wet_cough"); null when unavailable.
-     */
-    public AssessmentResult generatePreliminaryAssessment(
-            BreathingAnalyzer.BreathingResult breathing,
-            CoughAnalyzer.CoughType coughType,
-            String serverSoundLabel,
-            boolean hasHistoryOfAsthma,
-            boolean hasHistoryOfCOPD,
-            boolean hasMildCongestion) {
-        return generatePreliminaryAssessment(breathing, coughType, serverSoundLabel, UNKNOWN_COUGH_COUNT,
-                hasHistoryOfAsthma, hasHistoryOfCOPD, hasMildCongestion);
-    }
-
-    /**
-     * @param breathing        breathing analysis (bpm 0 = not measured yet)
-     * @param coughType        threshold-based cough type from {@link CoughAnalyzer}
-     * @param coughLabel       label from the trained cough model on the Flask server, may be null
-     * @param recentCoughCount cough episodes in the recent window, or -1 when unknown
+     * @param breathing         breathing analysis (bpm 0 = not measured yet)
+     * @param cough             latest cough / wheeze class from the on-device cough model,
+     *                          null when the model has not heard one yet
      * @param hasMildCongestion background information only; OTC guidance is given for coughs only
      */
     public AssessmentResult generatePreliminaryAssessment(
             BreathingAnalyzer.BreathingResult breathing,
-            CoughAnalyzer.CoughType coughType,
-            String coughLabel,
-            int recentCoughCount,
+            CoughClass cough,
             boolean hasHistoryOfAsthma,
             boolean hasHistoryOfCOPD,
             boolean hasMildCongestion) {
 
         AssessmentResult result = new AssessmentResult();
-        String label = coughLabel != null ? coughLabel.toLowerCase(Locale.US) : "";
         int bpm = breathing != null ? breathing.bpm : 0;
 
         boolean rapidSevere = bpm > 24;
         boolean rapid = bpm > 20;
-        boolean severeCough = coughType == CoughAnalyzer.CoughType.SEVERE || label.contains("severe");
-        boolean frequentCough = coughType == CoughAnalyzer.CoughType.FREQUENT;
-        boolean persistent = label.contains("persistent");
-        boolean wetCough = coughType == CoughAnalyzer.CoughType.WET || label.contains("wet");
-        boolean dryCough = coughType == CoughAnalyzer.CoughType.DRY || label.contains("dry");
-        result.wheezeDetected = label.contains("wheez");
+        boolean severeCough = cough == CoughClass.SEVERE_COUGH;
+        boolean persistent = cough == CoughClass.PERSISTENT_COUGH;
+        boolean wetCough = cough == CoughClass.WET_COUGH;
+        boolean dryCough = cough == CoughClass.DRY_COUGH;
+        result.wheezeDetected = cough == CoughClass.WHEEZING;
 
         // 1. PNEUMONIA SYMPTOM INDICATION (BPM > 24 or severe/worsening cough)
         if (rapidSevere || severeCough) {
@@ -98,21 +63,20 @@ public class AssessmentEngine {
             result.otcCategory = CATEGORY_PNEUMONIA;
             result.recommendHospital = true; // Shows hospital button for critical state
         }
-        // 2. ASTHMA-LIKE EPISODE (wheezing sound, or asthma history + rapid breathing / frequent cough)
-        else if (result.wheezeDetected || (hasHistoryOfAsthma && (rapid || frequentCough))) {
+        // 2. ASTHMA-LIKE EPISODE (wheezing sound, or asthma history + rapid breathing / persistent cough)
+        else if (result.wheezeDetected || (hasHistoryOfAsthma && (rapid || persistent))) {
             result.possibleFindings.add("Cough patterns potentially associated with an asthma-like respiratory episode.");
             if (result.wheezeDetected) result.observations.add("Sound classifier reported a wheezing-like sound.");
             if (rapid) result.observations.add(rateObservation(bpm, "above the normal 12-20 BPM range"));
-            if (frequentCough) result.observations.add(coughCountObservation(recentCoughCount));
+            if (persistent) result.observations.add("Sound classifier reported a persistent cough.");
             if (hasHistoryOfAsthma) result.observations.add("Profile lists a history of asthma.");
             result.otcCategory = CATEGORY_ASTHMA;
             result.recommendHospital = true; // Shows hospital button for emergency response
         }
-        // 3. COPD-RELATED PATTERN (COPD history + frequent/wet/persistent cough or rapid breathing)
-        else if (hasHistoryOfCOPD && (frequentCough || wetCough || persistent || rapid)) {
+        // 3. COPD-RELATED PATTERN (COPD history + wet/persistent cough or rapid breathing)
+        else if (hasHistoryOfCOPD && (wetCough || persistent || rapid)) {
             result.possibleFindings.add("Respiratory patterns possibly associated with COPD-related changes.");
             if (persistent) result.observations.add("Sound classifier reported a persistent cough.");
-            if (frequentCough) result.observations.add(coughCountObservation(recentCoughCount));
             if (wetCough) result.observations.add("Wet / productive cough pattern detected.");
             if (rapid) result.observations.add(rateObservation(bpm, "above the normal 12-20 BPM range"));
             result.observations.add("Profile lists a history of COPD.");
@@ -179,11 +143,5 @@ public class AssessmentEngine {
 
     private static String rateObservation(int bpm, String qualifier) {
         return "Measured breathing rate of " + bpm + " BPM is " + qualifier + ".";
-    }
-
-    private static String coughCountObservation(int count) {
-        return count >= 0
-                ? "Frequent coughing detected (" + count + " cough episodes in the last minute)."
-                : "Frequent coughing detected.";
     }
 }

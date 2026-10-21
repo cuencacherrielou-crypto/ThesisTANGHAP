@@ -24,24 +24,21 @@ import com.github.mikephil.charting.data.LineData;
 import com.github.mikephil.charting.data.LineDataSet;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
-import com.sti.tanghap.BuildConfig;
 import com.sti.tanghap.R;
+import com.sti.tanghap.ai.AiCoughClassifier;
 import com.sti.tanghap.ai.AssessmentEngine;
 import com.sti.tanghap.ai.BreathingAnalyzer;
+import com.sti.tanghap.ai.CoughClass;
+import com.sti.tanghap.ai.processor.MfccExtractor;
 import com.sti.tanghap.ble.ble.BleDeviceItem;
 import com.sti.tanghap.ble.ble.BleListener;
 import com.sti.tanghap.ble.ble.BleManager;
 import com.sti.tanghap.data.ConnectionLog;
 import com.sti.tanghap.data.HealthPrefs;
-import com.sti.tanghap.domain.CoughAnalyzer;
 import com.sti.tanghap.domain.InhalationTracker;
 import com.sti.tanghap.notify.NotificationHelper;
 
-import org.json.JSONObject;
-
 import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -51,22 +48,9 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.TimeUnit;
-
-import okhttp3.Call;
-import okhttp3.Callback;
-import okhttp3.MediaType;
-import okhttp3.MultipartBody;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
 
 public class LiveSessionActivity extends AppCompatActivity implements BleListener {
     private static final String TAG = "LiveSessionActivity";
-
-    /** Flask server URL; set with -Ptanghap.flaskUrl=... or in gradle.properties. */
-    public static final String BASE_URL = BuildConfig.FLASK_BASE_URL;
 
     /** app_prefs key for the last inhaler this phone connected to (device setting, not user data). */
     public static final String PREF_LAST_DEVICE = "last_device_address";
@@ -77,16 +61,9 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
     private static final int MAX_RECORDED_SAMPLES = 200_000;  // memory cap for the stored session trace
     private static final int TRACE_POINTS = 200;              // points saved for the result chart
 
-    // Cough episode detection (audio)
-    private static final int AUDIO_THRESHOLD = 3800;          // above background static hum (~1500 - 3500)
-    private static final long COUGH_END_GAP_MS = 250;         // quiet time that ends one cough episode
-    private static final long COUGH_MAX_MS = 1500;            // longer loud sounds are not one cough
-    private static final long RECENT_COUGH_WINDOW_MS = 60_000;
-    private static final int AUDIO_SAMPLE_RATE = 16000;
-
-    // Corrected Audio Buffering Constants
-    private static final int AUDIO_CHUNK_BYTES = AUDIO_SAMPLE_RATE * 2 * 2; // 2 seconds at 16kHz 16-bit
-    private static final int PRE_ROLL_BYTES = AUDIO_SAMPLE_RATE * 2 / 2;    // 0.5 seconds pre-roll
+    // Cough model audio windows (16 kHz 16-bit mono)
+    private static final int CLIP_BYTES = MfccExtractor.CLIP_SAMPLES * 2; // 2 s, the clip length the model was trained on
+    private static final int CLIP_HOP_BYTES = CLIP_BYTES / 2;             // 1 s step, so a cough on a window edge is still heard whole
 
     private BleManager ble;
     private String deviceAddress;
@@ -100,7 +77,6 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
     private MaterialButton btnCallEmergency;
     private final BreathingAnalyzer breathingAnalyzer = new BreathingAnalyzer();
     private final AssessmentEngine assessmentEngine = new AssessmentEngine();
-    private final CoughAnalyzer coughAnalyzer = new CoughAnalyzer();
     private final InhalationTracker inhalationTracker = new InhalationTracker(BreathingAnalyzer.INHALATION_THRESHOLD_KPA);
     private boolean worseningNotified = false;
 
@@ -126,40 +102,25 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
     private long lastBpmReadingMillis = 0;
     private BreathingAnalyzer.BreathingResult lastBreathing = BreathingAnalyzer.classify(0);
 
-    private final List<CoughAnalyzer.CoughFeatures> sessionCoughs = new ArrayList<>();
+    private int sessionCoughCount = 0;
     private int totalActuationCount = 0;
     private String aiCoughLabel = "Analyzing respiration pattern...";
-    private String predictedCoughLabel = null;
+    /** Latest cough or wheeze the model heard with enough confidence; null until it hears one. */
+    private CoughClass predictedCough = null;
+    private int predictedConfidencePercent = 0;
     // Set on the UI thread, read from BLE callbacks
     private volatile boolean sessionEnding = false;
 
-    // Written on the UI thread, read on the audio thread
-    private volatile boolean hasPredicted = false;
-
     // ---- Audio-thread state (only touched inside audioExecutor) ----
     private final ExecutorService audioExecutor = Executors.newSingleThreadExecutor();
-    private final ByteArrayOutputStream pcmAudioBuffer = new ByteArrayOutputStream();
-    private final ByteArrayOutputStream preRollBuffer = new ByteArrayOutputStream();
-    private boolean isRecordingCough = false;
-    private boolean isSendingToFlask = false;
-    private boolean inCoughEpisode = false;
-    private boolean waitingForQuiet = false;
-    private long coughStartMillis = 0;
-    private long lastLoudMillis = 0;
-    private int coughPeakAmplitude = 0;
-    private long lastPacketMs = 0;
-    private long lastGraphUpdateTime = 0;
+    private AiCoughClassifier coughClassifier;
+    private final ByteArrayOutputStream audioWindow = new ByteArrayOutputStream();
+    private boolean lastClipWasCough = false;
 
     // Baseline Pre-assessment Flags
     private boolean baselineAsthma = false;
     private boolean baselineCOPD = false;
     private boolean baselineCongestion = false;
-
-    private final OkHttpClient okHttpClient = new OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .build();
 
     private static class PressurePacket {
         final long arrivalMillis;
@@ -191,6 +152,13 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
 
         // Load Baseline Profile from SharedPreferences
         loadBaselineProfile();
+
+        try {
+            coughClassifier = new AiCoughClassifier(this);
+        } catch (IOException | RuntimeException e) {
+            Log.e(TAG, "Failed to load cough model", e);
+            aiCoughLabel = "Cough model unavailable";
+        }
 
         MaterialToolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -249,11 +217,8 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
             ble.disconnect();
         }
 
-        // Close any cough episode still open on the audio thread, then finish on the UI thread
-        runOnAudioThread(() -> {
-            flushCoughEpisode(System.currentTimeMillis());
-            runOnUiThread(this::finishSession);
-        });
+        // Let the audio thread post any clip it is still classifying, then finish on the UI thread
+        runOnAudioThread(() -> runOnUiThread(this::finishSession));
     }
 
     private void finishSession() {
@@ -262,15 +227,12 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
         int avgBpm = bpmReadings > 0 ? Math.round(bpmSum / (float) bpmReadings) : lastBreathing.bpm;
         BreathingAnalyzer.BreathingResult sessionBreathing = BreathingAnalyzer.classify(avgBpm);
 
-        List<CoughAnalyzer.CoughFeatures> busiestMinute = busiestCoughWindow(sessionCoughs, RECENT_COUGH_WINDOW_MS);
-        CoughAnalyzer.CoughType coughType = coughAnalyzer.analyze(busiestMinute, maxInhaleEffort);
         AssessmentEngine.AssessmentResult assessment = assessmentEngine.generatePreliminaryAssessment(
-                sessionBreathing, coughType, predictedCoughLabel, busiestMinute.size(),
-                baselineAsthma, baselineCOPD, baselineCongestion);
+                sessionBreathing, predictedCough, baselineAsthma, baselineCOPD, baselineCongestion);
 
-        String coughFinding = predictedCoughLabel != null
-                ? predictedCoughLabel
-                : (sessionCoughs.isEmpty() ? CoughAnalyzer.CoughType.NORMAL.label : coughType.label);
+        String coughFinding = predictedCough != null
+                ? predictedCough.findingText(predictedConfidencePercent)
+                : CoughClass.NON_COUGH.label;
 
         inhalationTracker.finish();
         long inhaleMillis = inhalationTracker.getAverageInhaleMillis();
@@ -286,7 +248,7 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
         intent.putExtra(SessionResultActivity.EXTRA_INHALE_MS, inhaleMillis);
         intent.putExtra(SessionResultActivity.EXTRA_AVG_BPM, avgBpm);
         intent.putExtra(SessionResultActivity.EXTRA_PATTERN, sessionBreathing.pattern);
-        intent.putExtra(SessionResultActivity.EXTRA_COUGH_COUNT, sessionCoughs.size());
+        intent.putExtra(SessionResultActivity.EXTRA_COUGH_COUNT, sessionCoughCount);
         intent.putExtra(SessionResultActivity.EXTRA_ACTUATIONS, totalActuationCount);
         intent.putExtra(SessionResultActivity.EXTRA_COUGH_FINDING, coughFinding);
         intent.putExtra(SessionResultActivity.EXTRA_INSIGHT, assessment.insight);
@@ -298,19 +260,6 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
 
         startActivity(intent);
         finish();
-    }
-
-    /** The 60-second stretch of the session with the most cough episodes. */
-    private static List<CoughAnalyzer.CoughFeatures> busiestCoughWindow(List<CoughAnalyzer.CoughFeatures> coughs, long windowMs) {
-        int bestStart = 0, bestEnd = 0, start = 0;
-        for (int end = 0; end < coughs.size(); end++) {
-            while (coughs.get(end).timestamp - coughs.get(start).timestamp > windowMs) start++;
-            if (end - start + 1 > bestEnd - bestStart) {
-                bestStart = start;
-                bestEnd = end + 1;
-            }
-        }
-        return new ArrayList<>(coughs.subList(bestStart, bestEnd));
     }
 
     /** Down-sampled recorded pressure, keeping the largest-magnitude value of each bucket so peaks survive. */
@@ -464,16 +413,14 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
             bpmReadings++;
         }
 
-        List<CoughAnalyzer.CoughFeatures> recentCoughs = recentCoughs(now);
-        CoughAnalyzer.CoughType ct = coughAnalyzer.analyze(recentCoughs, maxInhaleEffort);
-
         AssessmentEngine.AssessmentResult assessment = assessmentEngine.generatePreliminaryAssessment(
-                br, ct, predictedCoughLabel, recentCoughs.size(), baselineAsthma, baselineCOPD, baselineCongestion);
+                br, predictedCough, baselineAsthma, baselineCOPD, baselineCongestion);
 
         if (tvAiFindings != null) {
             tvAiFindings.setText(aiCoughLabel);
         }
 
+        boolean hasPredicted = predictedCough != null;
         if (tvAiObservations != null) {
             if (!hasPredicted) {
                 tvAiObservations.setText("Processing acoustic spectral data and respiratory patterns...");
@@ -505,22 +452,22 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
         }
     }
 
-    private List<CoughAnalyzer.CoughFeatures> recentCoughs(long now) {
-        List<CoughAnalyzer.CoughFeatures> recent = new ArrayList<>();
-        for (CoughAnalyzer.CoughFeatures c : sessionCoughs) {
-            if (now - c.timestamp <= RECENT_COUGH_WINDOW_MS) recent.add(c);
-        }
-        return recent;
-    }
-
-    private void onCoughEpisode(CoughAnalyzer.CoughFeatures cough) {
+    private void onClipClassified(AiCoughClassifier.Result result, boolean newCough) {
         if (sessionEnding && isFinishing()) return;
-        sessionCoughs.add(cough);
+        boolean accepted = result.isConfident();
+        addCoughBar(accepted && result.type.isCough ? result.percent() : 0);
+        if (newCough) sessionCoughCount++;
+        // Unsure clips (below MIN_CONFIDENCE) and non-cough sounds keep the last result
+        if (accepted && result.type != CoughClass.NON_COUGH) {
+            predictedCough = result.type;
+            predictedConfidencePercent = result.percent();
+            aiCoughLabel = result.type.displayText(predictedConfidencePercent);
+        }
         runAiAnalysis();
     }
 
     // =========================================================
-    // AUDIO (audio thread)
+    // AUDIO + COUGH MODEL (audio thread)
     // =========================================================
 
     @Override
@@ -540,124 +487,35 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
         }
     }
 
+    /** Classifies every 2-second window of the stream, stepping 1 second at a time. */
     private void processAudio(byte[] audioBytes) {
-        try {
-            int maxAmplitude = 0;
-            for (int i = 0; i < audioBytes.length - 1; i += 2) {
-                short sample = (short) ((audioBytes[i + 1] << 8) | (audioBytes[i] & 0xFF));
-                int absSample = Math.abs(sample);
-                if (absSample > maxAmplitude) {
-                    maxAmplitude = absSample;
-                }
+        if (coughClassifier == null) return;
+        audioWindow.write(audioBytes, 0, audioBytes.length);
+
+        while (audioWindow.size() >= CLIP_BYTES) {
+            byte[] buffered = audioWindow.toByteArray();
+            byte[] clip = Arrays.copyOf(buffered, CLIP_BYTES);
+            audioWindow.reset();
+            audioWindow.write(buffered, CLIP_HOP_BYTES, buffered.length - CLIP_HOP_BYTES);
+
+            AiCoughClassifier.Result result;
+            try {
+                result = coughClassifier.classify(normalizePcmAudio(clip));
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Cough model failed on an audio clip", e);
+                continue;
             }
 
-            long now = System.currentTimeMillis();
-            boolean loud = maxAmplitude > AUDIO_THRESHOLD;
-
-            detectCoughEpisode(now, loud, maxAmplitude, audioBytes.length);
-
-            if (loud && now - lastGraphUpdateTime > 120) {
-                // Throttle graph updates to every 120ms to prevent erratic redraws
-                lastGraphUpdateTime = now;
-                final int currentVolume = maxAmplitude;
-                runOnUiThread(() -> addCoughBar(currentVolume));
-            }
-
-            // ---- 2-second clip for the audio classifier ----
-            if (!isRecordingCough) {
-                preRollBuffer.write(audioBytes);
-                if (preRollBuffer.size() > PRE_ROLL_BYTES) {
-                    byte[] currentPreRoll = preRollBuffer.toByteArray();
-                    preRollBuffer.reset();
-                    int keepOffset = currentPreRoll.length - PRE_ROLL_BYTES;
-                    preRollBuffer.write(currentPreRoll, keepOffset, PRE_ROLL_BYTES);
-                }
-            }
-
-            if (loud && !hasPredicted && !isRecordingCough && !isSendingToFlask) {
-                // The pre-roll already contains this packet
-                isRecordingCough = true;
-                pcmAudioBuffer.reset();
-                pcmAudioBuffer.write(preRollBuffer.toByteArray());
-                preRollBuffer.reset();
-
-                runOnUiThread(() -> {
-                    aiCoughLabel = "Cough Detected: Analyzing Audio...";
-                    runAiAnalysis();
-                });
-            } else if (isRecordingCough) {
-                pcmAudioBuffer.write(audioBytes);
-            }
-
-            if (isRecordingCough && pcmAudioBuffer.size() >= AUDIO_CHUNK_BYTES) {
-                isRecordingCough = false;
-                isSendingToFlask = true;
-
-                byte[] rawPcm = pcmAudioBuffer.toByteArray();
-                pcmAudioBuffer.reset();
-                byte[] normalizedPcm = normalizePcmAudio(rawPcm);
-
-                File tempWav = new File(getCacheDir(), "ble_cough_chunk.wav");
-                savePcmAsWav(normalizedPcm, tempWav, AUDIO_SAMPLE_RATE, 1, 16);
-
-                sendAudioToFlaskServer(tempWav);
-            }
-        } catch (IOException e) {
-            Log.e(TAG, "Error buffering BLE audio data", e);
-            isRecordingCough = false;
-            isSendingToFlask = false;
+            // Overlapping windows hear the same cough twice; count it once
+            boolean confidentCough = result.isConfident() && result.type.isCough;
+            boolean newCough = confidentCough && !lastClipWasCough;
+            lastClipWasCough = confidentCough;
+            runOnUiThread(() -> onClipClassified(result, newCough));
         }
     }
 
-    /**
-     * One cough = one continuous loud burst. It ends after {@link #COUGH_END_GAP_MS} of quiet.
-     * Sounds louder than the threshold for longer than {@link #COUGH_MAX_MS} (e.g. talking) are
-     * counted once and must go quiet before another cough can start.
-     */
-    private void detectCoughEpisode(long now, boolean loud, int amplitude, int packetBytes) {
-        if (waitingForQuiet) {
-            if (!loud && now - lastLoudMillis > COUGH_END_GAP_MS) waitingForQuiet = false;
-            if (loud) lastLoudMillis = now;
-            return;
-        }
-
-        if (loud) {
-            if (!inCoughEpisode) {
-                inCoughEpisode = true;
-                coughStartMillis = now;
-                coughPeakAmplitude = amplitude;
-            } else {
-                coughPeakAmplitude = Math.max(coughPeakAmplitude, amplitude);
-            }
-            lastLoudMillis = now;
-            lastPacketMs = packetBytes * 1000L / (AUDIO_SAMPLE_RATE * 2L);
-        }
-
-        if (inCoughEpisode) {
-            if (now - coughStartMillis > COUGH_MAX_MS) {
-                flushCoughEpisode(now);
-                waitingForQuiet = true;
-            } else if (!loud && now - lastLoudMillis > COUGH_END_GAP_MS) {
-                flushCoughEpisode(now);
-            }
-        }
-    }
-
-    private void flushCoughEpisode(long now) {
-        if (!inCoughEpisode) return;
-        inCoughEpisode = false;
-
-        long durationMs = Math.min(lastLoudMillis - coughStartMillis + lastPacketMs, COUGH_MAX_MS);
-        // Map 16-bit amplitude onto the 0-255 intensity scale used by CoughAnalyzer and the dataset
-        int intensity = Math.min(255, Math.round(coughPeakAmplitude * 255f / 32767f));
-        long startedAt = coughStartMillis;
-
-        CoughAnalyzer.CoughFeatures cough = new CoughAnalyzer.CoughFeatures(intensity, durationMs, false, startedAt);
-        runOnUiThread(() -> onCoughEpisode(cough));
-    }
-
-    private void addCoughBar(int volume) {
-        coughEntries.add(new BarEntry(coughEntries.size(), volume));
+    private void addCoughBar(int value) {
+        coughEntries.add(new BarEntry(coughEntries.size(), value));
 
         if (coughEntries.size() > 30) {
             coughEntries.remove(0);
@@ -703,131 +561,6 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
         }
 
         return normalized;
-    }
-
-    // =========================================================
-    // AUDIO CLASSIFIER (trained model on the Flask server)
-    // =========================================================
-
-    private void sendAudioToFlaskServer(File audioFile) {
-        RequestBody fileBody = RequestBody.create(audioFile, MediaType.parse("audio/wav"));
-
-        RequestBody requestBody = new MultipartBody.Builder()
-                .setType(MultipartBody.FORM)
-                .addFormDataPart("audio", audioFile.getName(), fileBody)
-                .build();
-
-        Request request = new Request.Builder()
-                .url(BASE_URL + "predict")
-                .post(requestBody)
-                .build();
-
-        okHttpClient.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(Call call, IOException e) {
-                Log.e(TAG, "Failed to connect to Local Flask API: " + e.getMessage());
-                finishClassifierRequest();
-                runOnUiThread(() -> resetCoughLabel());
-            }
-
-            @Override
-            public void onResponse(Call call, Response response) throws IOException {
-                String rawPrediction = "";
-                try {
-                    if (response.isSuccessful() && response.body() != null) {
-                        String jsonResponse = response.body().string();
-                        Log.d(TAG, "Flask API Response: " + jsonResponse);
-                        JSONObject json = new JSONObject(jsonResponse);
-                        rawPrediction = json.optString("prediction",
-                                json.optString("cough_type",
-                                        json.optString("result", ""))).toLowerCase(Locale.US).trim();
-                    } else {
-                        Log.e(TAG, "Flask API error: HTTP " + response.code());
-                    }
-                } catch (Exception e) {
-                    Log.e(TAG, "JSON Parsing error", e);
-                } finally {
-                    response.close();
-                    finishClassifierRequest();
-                }
-
-                final String prediction = rawPrediction;
-                runOnUiThread(() -> applyServerPrediction(prediction));
-            }
-        });
-    }
-
-    private void finishClassifierRequest() {
-        runOnAudioThread(() -> {
-            isSendingToFlask = false;
-            isRecordingCough = false;
-        });
-    }
-
-    private void applyServerPrediction(String rawPrediction) {
-        if (rawPrediction.isEmpty()
-                || rawPrediction.contains("non_cough") || rawPrediction.contains("non cough")
-                || rawPrediction.contains("noise") || rawPrediction.contains("background")) {
-            resetCoughLabel();
-            return;
-        }
-        String formattedLabel = rawPrediction.replace("_", " ");
-        formattedLabel = formattedLabel.substring(0, 1).toUpperCase(Locale.US) + formattedLabel.substring(1);
-        String displayText = rawPrediction.contains("wheez")
-                ? "Wheezing Detected"
-                : "Cough Detected: " + formattedLabel;
-        setPrediction(formattedLabel, displayText);
-    }
-
-    /** Model unreachable, errored, or heard no cough: wait for the next cough clip. */
-    private void resetCoughLabel() {
-        aiCoughLabel = "Analyzing respiration pattern...";
-        runAiAnalysis();
-    }
-
-    private void setPrediction(String label, String displayText) {
-        predictedCoughLabel = label;
-        aiCoughLabel = displayText;
-        hasPredicted = true;
-        runAiAnalysis();
-    }
-
-    private void savePcmAsWav(byte[] pcmData, File wavFile, int sampleRate, int channels, int bitDepth) throws IOException {
-        long totalAudioLen = pcmData.length;
-        long totalDataLen = totalAudioLen + 36;
-        long byteRate = (long) sampleRate * channels * bitDepth / 8;
-
-        byte[] header = new byte[44];
-        header[0] = 'R'; header[1] = 'I'; header[2] = 'F'; header[3] = 'F';
-        header[4] = (byte) (totalDataLen & 0xff);
-        header[5] = (byte) ((totalDataLen >> 8) & 0xff);
-        header[6] = (byte) ((totalDataLen >> 16) & 0xff);
-        header[7] = (byte) ((totalDataLen >> 24) & 0xff);
-        header[8] = 'W'; header[9] = 'A'; header[10] = 'V'; header[11] = 'E';
-        header[12] = 'f'; header[13] = 'm'; header[14] = 't'; header[15] = ' ';
-        header[16] = 16; header[17] = 0; header[18] = 0; header[19] = 0;
-        header[20] = 1; header[21] = 0;
-        header[22] = (byte) channels; header[23] = 0;
-        header[24] = (byte) (sampleRate & 0xff);
-        header[25] = (byte) ((sampleRate >> 8) & 0xff);
-        header[26] = (byte) ((sampleRate >> 16) & 0xff);
-        header[27] = (byte) ((sampleRate >> 24) & 0xff);
-        header[28] = (byte) (byteRate & 0xff);
-        header[29] = (byte) ((byteRate >> 8) & 0xff);
-        header[30] = (byte) ((byteRate >> 16) & 0xff);
-        header[31] = (byte) ((byteRate >> 24) & 0xff);
-        header[32] = (byte) (channels * bitDepth / 8); header[33] = 0;
-        header[34] = (byte) bitDepth; header[35] = 0;
-        header[36] = 'd'; header[37] = 'a'; header[38] = 't'; header[39] = 'a';
-        header[40] = (byte) (totalAudioLen & 0xff);
-        header[41] = (byte) ((totalAudioLen >> 8) & 0xff);
-        header[42] = (byte) ((totalAudioLen >> 16) & 0xff);
-        header[43] = (byte) ((totalAudioLen >> 24) & 0xff);
-
-        try (FileOutputStream out = new FileOutputStream(wavFile)) {
-            out.write(header);
-            out.write(pcmData);
-        }
     }
 
     // =========================================================
@@ -918,6 +651,9 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
         if (ble != null) {
             ble.disconnect();
         }
+        runOnAudioThread(() -> {
+            if (coughClassifier != null) coughClassifier.close();
+        });
         audioExecutor.shutdown();
     }
 }

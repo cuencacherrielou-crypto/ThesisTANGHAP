@@ -8,6 +8,7 @@
     <string name="facebook_app_id">949544544482263</string>
     <string name="fb_login_protocol_scheme">fb949544544482263</string>
     <string name="facebook_client_token">fdaa99449df109d583258929e6f9d460</string>
+    <string name="privacy_policy_url" translatable="false">https://cuencacherrielou-crypto.github.io/ThesisTANGHAP/privacy-policy.html</string>
 
     <string name="or_text">OR</string>
     <string name="or_continue_with">OR CONTINUE WITH</string>

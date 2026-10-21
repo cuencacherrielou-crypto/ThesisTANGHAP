@@ -16,7 +16,6 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
@@ -137,11 +136,7 @@ public class RegisterActivity extends AppCompatActivity {
         ClickableSpan clickableSpan = new ClickableSpan() {
             @Override
             public void onClick(@NonNull View widget) {
-                new AlertDialog.Builder(RegisterActivity.this)
-                        .setTitle("Terms and Privacy Policy")
-                        .setMessage("TANGHAP respects your privacy. All sensor data is stored securely and used only for providing trend analytics. We do not provide medical diagnosis. By using this app, you agree to our data processing practices.")
-                        .setPositiveButton("I Understand", null)
-                        .show();
+                PrivacyPolicy.showDialog(RegisterActivity.this);
             }
             @Override
             public void updateDrawState(@NonNull TextPaint ds) {
