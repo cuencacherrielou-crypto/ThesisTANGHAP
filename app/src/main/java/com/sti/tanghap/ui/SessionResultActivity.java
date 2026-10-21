@@ -1,7 +1,6 @@
 package com.sti.tanghap.ui;
 
 import android.content.Intent;
-import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
@@ -14,9 +13,12 @@ import com.github.mikephil.charting.data.LineData;
 import com.github.mikephil.charting.data.LineDataSet;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
+import com.google.firebase.auth.FirebaseAuth;
 import com.sti.tanghap.R;
 import com.sti.tanghap.data.AppDatabase;
+import com.sti.tanghap.data.SessionDao;
 import com.sti.tanghap.data.SessionEntity;
+import com.sti.tanghap.data.SessionRepository;
 import com.sti.tanghap.domain.BaselineCalculator;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -26,8 +28,28 @@ import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class SessionResultActivity extends AppCompatActivity {
+    // Extras sent by LiveSessionActivity when a session ends
+    public static final String EXTRA_START = "sessionStart";
+    public static final String EXTRA_END = "sessionEnd";
+    public static final String EXTRA_MAX_EFFORT = "maxEffort";
+    public static final String EXTRA_INHALE_MS = "inhaleMillis";
+    public static final String EXTRA_AVG_BPM = "avgBpm";
+    public static final String EXTRA_PATTERN = "breathingPattern";
+    public static final String EXTRA_COUGH_COUNT = "coughCount";
+    public static final String EXTRA_ACTUATIONS = "actuationCount";
+    public static final String EXTRA_COUGH_FINDING = "coughFinding";
+    public static final String EXTRA_INSIGHT = "aiInsight";
+    public static final String EXTRA_OBSERVATIONS = "aiObservations";
+    public static final String EXTRA_OTC = "otcRecommendation";
+    public static final String EXTRA_RISK_HIGH = "riskLevelHigh";
+    public static final String EXTRA_RECOMMENDATION = "recommendation";
+    public static final String EXTRA_TRACE = "pressureTrace";
+
+    private static final long BASELINE_WINDOW_MS = TimeUnit.DAYS.toMillis(7);
+
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     // STANDARD 12-HOUR TIME FORMAT WITH AM/PM DISPLAY
@@ -75,7 +97,7 @@ public class SessionResultActivity extends AppCompatActivity {
         currentSessionId = getIntent().getStringExtra("sessionId");
 
         findViewById(R.id.btnGoDashboard).setOnClickListener(v -> finish());
-        btnNearbyHospitals.setOnClickListener(v -> findNearbyHospitals());
+        btnNearbyHospitals.setOnClickListener(v -> NearbyHospitals.open(this));
 
         findViewById(R.id.btnExport).setOnClickListener(v -> {
             if (currentSessionId != null) {
@@ -90,10 +112,18 @@ public class SessionResultActivity extends AppCompatActivity {
         if (currentSessionId != null) {
             // Load existing session from database (e.g. opened from History)
             loadSessionData(currentSessionId);
-        } else {
+        } else if (getIntent().hasExtra(EXTRA_START)) {
             // Processing Live Session Results passed from LiveSessionActivity
             processAndSaveLiveSession();
+        } else {
+            showEmptyState();
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        executor.shutdown();
     }
 
     private void setupChart() {
@@ -104,112 +134,117 @@ public class SessionResultActivity extends AppCompatActivity {
         chartResultPattern.getAxisLeft().setDrawGridLines(false);
         chartResultPattern.getAxisLeft().setDrawLabels(false);
         chartResultPattern.setTouchEnabled(false);
+        chartResultPattern.setNoDataText("No recorded pressure trace for this session.");
+        chartResultPattern.setNoDataTextColor(ContextCompat.getColor(this, R.color.text_low_emphasis));
+    }
+
+    private static String currentUid() {
+        return FirebaseAuth.getInstance().getCurrentUser() != null
+                ? FirebaseAuth.getInstance().getCurrentUser().getUid() : null;
     }
 
     private void processAndSaveLiveSession() {
-        float maxEffort = getIntent().getFloatExtra("maxEffort", 0f);
-        String breathingRateStr = getIntent().getStringExtra("breathingRate");
-        String breathingPattern = getIntent().getStringExtra("breathingPattern");
-        String aiFindings = getIntent().getStringExtra("aiFindings");
-        String aiObservations = getIntent().getStringExtra("aiObservations");
+        Intent in = getIntent();
+        String uid = currentUid();
 
-        // EXTRACT SENSOR METRICS FROM INTENT EXTRAS
-        int actuationCount = getIntent().getIntExtra("actuationCount", 0);
-        int coughCount = getIntent().getIntExtra("coughCount", 0);
-        long startMillis = getIntent().getLongExtra("startTimeMillis", System.currentTimeMillis());
-        long endMillis = getIntent().getLongExtra("endTimeMillis", System.currentTimeMillis());
-        long inhaleMillis = getIntent().getLongExtra("inhaleDurationMillis", 0L);
-        boolean riskHigh = getIntent().getBooleanExtra("riskLevelHigh", false);
-        String otcRecommendation = getIntent().getStringExtra("otcRecommendation");
+        currentSessionId = UUID.randomUUID().toString();
+        SessionEntity newSession = new SessionEntity(currentSessionId);
+        newSession.userId = uid;
+        newSession.startTimeMillis = in.getLongExtra(EXTRA_START, System.currentTimeMillis());
+        newSession.endTimeMillis = in.getLongExtra(EXTRA_END, System.currentTimeMillis());
+        newSession.peakPressureKpa = in.getFloatExtra(EXTRA_MAX_EFFORT, 0f);
+        newSession.inhaleDurationMillis = in.getLongExtra(EXTRA_INHALE_MS, 0L);
+        newSession.averageBpm = in.getIntExtra(EXTRA_AVG_BPM, 0);
+        newSession.detectedPattern = in.getStringExtra(EXTRA_PATTERN);
+        newSession.coughCount = in.getIntExtra(EXTRA_COUGH_COUNT, 0);
+        newSession.actuationCount = in.getIntExtra(EXTRA_ACTUATIONS, 0);
+        newSession.coughFinding = in.getStringExtra(EXTRA_COUGH_FINDING);
+        newSession.aiPreliminaryInsight = in.getStringExtra(EXTRA_INSIGHT);
+        newSession.aiObservations = in.getStringExtra(EXTRA_OBSERVATIONS);
+        newSession.otcRecommendation = in.getStringExtra(EXTRA_OTC);
+        newSession.riskLevelHigh = in.getBooleanExtra(EXTRA_RISK_HIGH, false);
+        newSession.recommendation = in.getStringExtra(EXTRA_RECOMMENDATION);
+        newSession.pressureTrace = in.getStringExtra(EXTRA_TRACE);
 
-        if (breathingRateStr != null || aiFindings != null) {
-            int bpmVal = 0;
-            if (breathingRateStr != null) {
-                try {
-                    bpmVal = Integer.parseInt(breathingRateStr.replaceAll("[^0-9]", ""));
-                } catch (Exception ignored) {}
+        executor.execute(() -> {
+            SessionDao dao = AppDatabase.getInstance(this).sessionDao();
+            BaselineCalculator.Baseline baseline = computeBaseline(dao, newSession);
+            newSession.baselineComparison = baselineText(newSession, baseline);
+
+            if (uid != null) {
+                dao.insert(newSession);
+                new SessionRepository(this).uploadSession(newSession);
             }
 
-            currentSessionId = UUID.randomUUID().toString();
-            SessionEntity newSession = new SessionEntity(currentSessionId);
-
-            if (com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser() != null) {
-                newSession.userId = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser().getUid();
-            }
-
-            newSession.startTimeMillis = startMillis;
-            newSession.endTimeMillis = endMillis;
-            newSession.inhaleDurationMillis = inhaleMillis;
-            newSession.riskLevelHigh = riskHigh;
-            newSession.otcRecommendation = otcRecommendation;
-            newSession.peakPressureKpa = maxEffort;
-            newSession.averageBpm = bpmVal;
-            newSession.detectedPattern = breathingPattern != null ? breathingPattern : "Normal";
-            newSession.aiPreliminaryInsight = aiFindings != null ? aiFindings : "Session analysis complete.";
-            newSession.aiObservations = aiObservations != null ? aiObservations : "Respiratory pattern monitored.";
-
-            // BIND ACTUATION AND COUGH VALUES TO DATABASE ENTITY
-            newSession.actuationCount = actuationCount;
-            newSession.coughCount = coughCount;
-
-            executor.execute(() -> {
-                AppDatabase db = AppDatabase.getInstance(this);
-                db.sessionDao().insert(newSession);
-
-                com.sti.tanghap.data.SessionRepository repository = new com.sti.tanghap.data.SessionRepository(this);
-                repository.uploadSession(newSession);
-
-                String uid = newSession.userId != null ? newSession.userId : "";
-                List<SessionEntity> allSessions = db.sessionDao().getAllForUser(uid);
-                BaselineCalculator.Baseline baseline = baselineCalculator.compute(allSessions);
-
-                runOnUiThread(() -> {
-                    displaySessionDetails(newSession);
-                    displayAiAssessment(newSession);
-                    displayBaselineComparison(newSession, baseline);
-                    generateRepresentativeWaveform(newSession);
-
-                    findViewById(R.id.btnExport).setEnabled(true);
-                    findViewById(R.id.btnExport).setAlpha(1.0f);
-                });
+            runOnUiThread(() -> {
+                if (uid == null) {
+                    Toast.makeText(this, "Not signed in: this session was not saved.", Toast.LENGTH_LONG).show();
+                    currentSessionId = null;
+                }
+                showSession(newSession);
             });
-        } else {
-            showEmptyState();
-        }
+        });
     }
 
     private void loadSessionData(String id) {
+        String uid = currentUid();
+        if (uid == null) {
+            showEmptyState();
+            return;
+        }
         executor.execute(() -> {
-            AppDatabase db = AppDatabase.getInstance(this);
-            String uid = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser() != null ?
-                    com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser().getUid() : "";
-
-            SessionEntity session = db.sessionDao().getAllForUser(uid)
-                    .stream().filter(s -> s.id.equals(id)).findFirst().orElse(null);
+            SessionDao dao = AppDatabase.getInstance(this).sessionDao();
+            SessionEntity session = dao.getByIdForUser(id, uid);
 
             if (session != null) {
-                List<SessionEntity> allSessions = db.sessionDao().getAllForUser(uid);
-                BaselineCalculator.Baseline baseline = baselineCalculator.compute(allSessions);
-
-                runOnUiThread(() -> {
-                    displaySessionDetails(session);
-                    displayAiAssessment(session);
-                    displayBaselineComparison(session, baseline);
-                    generateRepresentativeWaveform(session);
-
-                    findViewById(R.id.btnExport).setEnabled(true);
-                    findViewById(R.id.btnExport).setAlpha(1.0f);
-                });
+                if (session.baselineComparison == null) {
+                    session.baselineComparison = baselineText(session, computeBaseline(dao, session));
+                }
+                runOnUiThread(() -> showSession(session));
             } else {
                 runOnUiThread(this::showEmptyState);
             }
         });
     }
 
+    /** Baseline = this user's sessions in the 7 days before this session, excluding the session itself. */
+    private BaselineCalculator.Baseline computeBaseline(SessionDao dao, SessionEntity session) {
+        List<SessionEntity> previous = new ArrayList<>();
+        if (session.userId != null) {
+            for (SessionEntity s : dao.getSinceForUser(session.userId, session.startTimeMillis - BASELINE_WINDOW_MS)) {
+                if (!s.id.equals(session.id) && s.startTimeMillis < session.startTimeMillis) previous.add(s);
+            }
+        }
+        return baselineCalculator.compute(previous);
+    }
+
+    private static String baselineText(SessionEntity session, BaselineCalculator.Baseline baseline) {
+        if (baseline.avgPeakPressure <= 0) {
+            return "No sessions in the previous 7 days yet. Establishing baseline...";
+        }
+        float diff = ((session.peakPressureKpa - baseline.avgPeakPressure) / baseline.avgPeakPressure) * 100;
+        String direction = diff >= 0 ? "stronger" : "weaker";
+        return String.format(Locale.getDefault(),
+                "Inhalation effort is %.1f%% %s than your 7-day average baseline.", Math.abs(diff), direction);
+    }
+
+    private void showSession(SessionEntity session) {
+        displaySessionDetails(session);
+        displayAiAssessment(session);
+        tvBaselineComparison.setText(session.baselineComparison);
+        displayPressureTrace(session);
+
+        boolean canExport = currentSessionId != null;
+        findViewById(R.id.btnExport).setEnabled(canExport);
+        findViewById(R.id.btnExport).setAlpha(canExport ? 1.0f : 0.5f);
+    }
+
     private void displaySessionDetails(SessionEntity session) {
         tvDate.setText(sdf.format(new Date(session.startTimeMillis)));
         tvPeak.setText(String.format(Locale.getDefault(), "%.1f kPa", session.peakPressureKpa));
-        tvInhaleDur.setText(String.format(Locale.getDefault(), "%.2f s", session.inhaleDurationMillis / 1000f));
+        tvInhaleDur.setText(session.inhaleDurationMillis > 0
+                ? String.format(Locale.getDefault(), "%.2f s", session.inhaleDurationMillis / 1000f)
+                : "-- s");
         tvCough.setText(String.valueOf(session.coughCount));
 
         // Dynamic UI render for Actuations Count
@@ -238,29 +273,6 @@ public class SessionResultActivity extends AppCompatActivity {
         EmergencyContactButton.bind(this, btnCallEmergency, session.riskLevelHigh);
     }
 
-    private void displayBaselineComparison(SessionEntity session, BaselineCalculator.Baseline baseline) {
-        if (baseline.avgPeakPressure == 0) {
-            tvBaselineComparison.setText("First session saved. Establishing baseline...");
-            return;
-        }
-
-        float diff = ((session.peakPressureKpa - baseline.avgPeakPressure) / baseline.avgPeakPressure) * 100;
-        String direction = diff >= 0 ? "stronger" : "weaker";
-        tvBaselineComparison.setText(String.format(Locale.getDefault(),
-                "Inhalation effort is %.1f%% %s than your 7-day average baseline.", Math.abs(diff), direction));
-    }
-
-    private void findNearbyHospitals() {
-        Uri gmmIntentUri = Uri.parse("geo:0,0?q=hospitals+near+me");
-        Intent mapIntent = new Intent(Intent.ACTION_VIEW, gmmIntentUri);
-        mapIntent.setPackage("com.google.android.apps.maps");
-        if (mapIntent.resolveActivity(getPackageManager()) != null) {
-            startActivity(mapIntent);
-        } else {
-            Toast.makeText(this, "Google Maps is not installed.", Toast.LENGTH_SHORT).show();
-        }
-    }
-
     private void showEmptyState() {
         tvDate.setText("No Session Data Available");
         tvAvgBpm.setText("-- BPM");
@@ -270,30 +282,34 @@ public class SessionResultActivity extends AppCompatActivity {
         tvAct.setText("0");
         tvAiFindings.setText("Processing Error");
         tvAiObservations.setText("Data could not be retrieved.");
+        tvBaselineComparison.setText("--");
         findViewById(R.id.btnExport).setEnabled(false);
         findViewById(R.id.btnExport).setAlpha(0.5f);
     }
 
-    private void generateRepresentativeWaveform(SessionEntity session) {
+    /** Plots the pressure actually recorded during the session (no synthetic waveform). */
+    private void displayPressureTrace(SessionEntity session) {
         List<Entry> entries = new ArrayList<>();
-        String pattern = session.detectedPattern != null ? session.detectedPattern : "";
-
-        float frequency = 0.5f;
-        float amplitude = session.peakPressureKpa > 0 ? session.peakPressureKpa : 8.0f;
-        if (pattern.contains("Tachypnea")) frequency = 1.2f;
-        else if (pattern.contains("Bradypnea")) frequency = 0.2f;
-
-        for (int i = 0; i < 100; i++) {
-            float val = (float) (amplitude * Math.abs(Math.sin(i * frequency * 0.2)));
-            entries.add(new Entry(i, val));
+        if (session.pressureTrace != null && !session.pressureTrace.isEmpty()) {
+            String[] parts = session.pressureTrace.split(",");
+            for (int i = 0; i < parts.length; i++) {
+                try {
+                    entries.add(new Entry(i, Float.parseFloat(parts[i])));
+                } catch (NumberFormatException ignored) {
+                }
+            }
         }
 
-        LineDataSet set = new LineDataSet(entries, "Pattern");
+        if (entries.isEmpty()) {
+            chartResultPattern.clear();
+            return;
+        }
+
+        LineDataSet set = new LineDataSet(entries, "Pressure");
         set.setColor(ContextCompat.getColor(this, R.color.primary_light));
-        set.setLineWidth(2.5f);
+        set.setLineWidth(2f);
         set.setDrawCircles(false);
         set.setDrawValues(false);
-        set.setMode(LineDataSet.Mode.CUBIC_BEZIER);
         set.setDrawFilled(true);
         set.setFillColor(ContextCompat.getColor(this, R.color.primary_light));
         set.setFillAlpha(40);

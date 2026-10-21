@@ -63,4 +63,62 @@ public class AssessmentEngineTest {
         assertEquals("Standard Respiratory Evaluation", r.otcCategory);
         assertFalse(r.recommendPharmacy);
     }
+
+    // ---------- Unified rule set (single engine for live + saved session) ----------
+
+    private AssessmentEngine.AssessmentResult assess(int bpm, CoughAnalyzer.CoughType type, String label,
+                                                     int coughs, boolean asthma, boolean copd) {
+        return engine.generatePreliminaryAssessment(
+                BreathingAnalyzer.classify(bpm), type, label, coughs, asthma, copd, false);
+    }
+
+    @Test
+    public void normalBreathingIsStandard() {
+        AssessmentEngine.AssessmentResult r = assess(16, CoughAnalyzer.CoughType.NORMAL, null, 0, false, false);
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.otcCategory);
+        assertFalse(r.recommendHospital);
+    }
+
+    @Test
+    public void normalRateIsNotBronchitis() {
+        // 19 BPM is inside the normal 12-20 range
+        AssessmentEngine.AssessmentResult r = assess(19, CoughAnalyzer.CoughType.NORMAL, null, 0, false, false);
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.otcCategory);
+    }
+
+    @Test
+    public void observationsOnlyDescribeMeasuredData() {
+        AssessmentEngine.AssessmentResult r = assess(26, CoughAnalyzer.CoughType.NORMAL, null, 0, false, false);
+        assertEquals(AssessmentEngine.CATEGORY_PNEUMONIA, r.otcCategory);
+        assertTrue(r.recommendHospital);
+        for (String o : r.observations) {
+            assertFalse(o, o.toLowerCase().contains("mucus"));
+            assertFalse(o, o.toLowerCase().contains("cough"));
+        }
+    }
+
+    @Test
+    public void wheezingLabelFromModelIsAsthmaLike() {
+        AssessmentEngine.AssessmentResult r = assess(16, CoughAnalyzer.CoughType.DRY, "Wheezing", 1, false, false);
+        assertEquals(AssessmentEngine.CATEGORY_ASTHMA, r.otcCategory);
+    }
+
+    @Test
+    public void persistentCoughWithCopdHistoryIsCopd() {
+        AssessmentEngine.AssessmentResult r = assess(16, CoughAnalyzer.CoughType.DRY, "Persistent cough", 2, false, true);
+        assertEquals(AssessmentEngine.CATEGORY_COPD, r.otcCategory);
+    }
+
+    @Test
+    public void wetCoughIsBronchitisPattern() {
+        AssessmentEngine.AssessmentResult r = assess(16, CoughAnalyzer.CoughType.DRY, "Wet cough", 1, false, false);
+        assertEquals(AssessmentEngine.CATEGORY_BRONCHITIS, r.otcCategory);
+        assertFalse(r.recommendHospital);
+    }
+
+    @Test
+    public void insightContainsGuidance() {
+        AssessmentEngine.AssessmentResult r = assess(16, CoughAnalyzer.CoughType.NORMAL, null, 0, false, false);
+        assertTrue(r.insight.contains(r.guidance));
+    }
 }

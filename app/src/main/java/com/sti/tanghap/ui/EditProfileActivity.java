@@ -1,6 +1,7 @@
 package com.sti.tanghap.ui;
 
 import android.content.SharedPreferences;
+import com.sti.tanghap.data.HealthPrefs;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Toast;
@@ -13,6 +14,7 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.sti.tanghap.R;
 import com.sti.tanghap.data.ProfilePrefs;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +29,11 @@ public class EditProfileActivity extends AppCompatActivity {
     private View progress;
     private FirebaseFirestore db;
     private FirebaseUser user;
+
+    // Conditions shown as checkboxes here; anything else (e.g. "Other: ...") is preserved on save
+    private static final List<String> MANAGED_CONDITIONS =
+            Arrays.asList("Asthma", "COPD", "Bronchitis", "Pneumonia", "Allergies", "Mild Congestion", "None");
+    private Map<String, Object> loadedHealthMap = new HashMap<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -80,8 +87,10 @@ public class EditProfileActivity extends AppCompatActivity {
                         etAge.setText(String.valueOf(documentSnapshot.get("age")));
                         etBirthday.setText(documentSnapshot.getString("birthday"));
 
-                        Map<String, Object> healthMap = (Map<String, Object>) documentSnapshot.get("healthProfile");
+                        Object rawHealth = documentSnapshot.get("healthProfile");
+                        Map<String, Object> healthMap = rawHealth instanceof Map ? (Map<String, Object>) rawHealth : null;
                         if (healthMap != null) {
+                            loadedHealthMap = new HashMap<>(healthMap);
                             List<String> conditions = (List<String>) healthMap.get("diagnosedConditions");
                             if (conditions != null) {
                                 cbAsthma.setChecked(conditions.contains("Asthma"));
@@ -90,10 +99,12 @@ public class EditProfileActivity extends AppCompatActivity {
                                 cbPneumonia.setChecked(conditions.contains("Pneumonia"));
                                 cbAllergies.setChecked(conditions.contains("Allergies") || conditions.contains("Mild Congestion"));
                             }
-                            etInhalerType.setText((String) healthMap.get("currentInhalerType"));
-                            etInhalerUsage.setText((String) healthMap.get("inhalerUsageFreqPerDay"));
-                            Boolean smoke = (Boolean) healthMap.get("isSmokerOrVaper");
-                            if (smoke != null) cbSmoke.setChecked(smoke);
+                            Object inhalerType = healthMap.get("currentInhalerType");
+                            Object inhalerUsage = healthMap.get("inhalerUsageFreqPerDay");
+                            if (inhalerType instanceof String) etInhalerType.setText((String) inhalerType);
+                            if (inhalerUsage instanceof String) etInhalerUsage.setText((String) inhalerUsage);
+                            Object smoke = healthMap.get("isSmokerOrVaper");
+                            if (smoke instanceof Boolean) cbSmoke.setChecked((Boolean) smoke);
                             Object doses = healthMap.get("prescribedDosesPerDay");
                             if (doses instanceof Number && ((Number) doses).intValue() > 0) {
                                 etPrescribedDoses.setText(String.valueOf(((Number) doses).intValue()));
@@ -103,7 +114,7 @@ public class EditProfileActivity extends AppCompatActivity {
                             Object allergy = healthMap.get("allergyDetails");
                             if (allergy != null) etAllergyDetails.setText(String.valueOf(allergy));
                         } else {
-                            SharedPreferences pref = getSharedPreferences("TanghapUserPreferences", MODE_PRIVATE);
+                            SharedPreferences pref = getSharedPreferences(HealthPrefs.HEALTH_PREFS, MODE_PRIVATE);
                             cbAsthma.setChecked(pref.getBoolean("has_asthma", false));
                             cbCOPD.setChecked(pref.getBoolean("has_copd", false));
                             cbBronchitis.setChecked(pref.getBoolean("has_bronchitis", false));
@@ -164,25 +175,17 @@ public class EditProfileActivity extends AppCompatActivity {
             return;
         }
 
+        if (user == null) return;
         setLoading(true);
 
-        // 1. Immediately sync to SharedPreferences for AssessmentEngine in LiveSessionActivity
-        SharedPreferences pref = getSharedPreferences("TanghapUserPreferences", MODE_PRIVATE);
-        SharedPreferences.Editor editor = pref.edit();
-        editor.putBoolean("has_asthma", hasAsthma);
-        editor.putBoolean("has_copd", hasCOPD);
-        editor.putBoolean("has_bronchitis", hasBronchitis);
-        editor.putBoolean("has_congestion", hasAllergies);
-        editor.putString("inhaler_usage", inhalerUsage);
-        editor.putInt(ProfilePrefs.KEY_PRESCRIBED_DOSES, prescribedDoses);
-        editor.putString(ProfilePrefs.KEY_MEDICATIONS, medications);
-        editor.putString(ProfilePrefs.KEY_EMERGENCY_NAME, emergencyName);
-        editor.putString(ProfilePrefs.KEY_EMERGENCY_RELATION, emergencyRelation);
-        editor.putString(ProfilePrefs.KEY_EMERGENCY_PHONE, emergencyPhone);
-        editor.apply();
-
-        // 2. Update Firestore document
+        // Keep conditions this screen does not show (e.g. "Other: ..." from onboarding)
         List<String> conditions = new ArrayList<>();
+        Object previous = loadedHealthMap.get("diagnosedConditions");
+        if (previous instanceof List) {
+            for (Object c : (List<?>) previous) {
+                if (c instanceof String && !MANAGED_CONDITIONS.contains(c)) conditions.add((String) c);
+            }
+        }
         if (hasAsthma) conditions.add("Asthma");
         if (hasCOPD) conditions.add("COPD");
         if (hasBronchitis) conditions.add("Bronchitis");
@@ -194,8 +197,26 @@ public class EditProfileActivity extends AppCompatActivity {
         contact.put("relation", emergencyRelation);
         contact.put("phone", emergencyPhone);
 
-        // Dotted keys update only these fields, so the other onboarding answers
-        // stored in healthProfile are kept.
+        // 1. Immediately sync to SharedPreferences for AssessmentEngine in LiveSessionActivity
+        Map<String, Object> mergedHealth = new HashMap<>(loadedHealthMap);
+        mergedHealth.put("diagnosedConditions", conditions);
+        mergedHealth.put("currentInhalerType", inhalerType);
+        mergedHealth.put("inhalerUsageFreqPerDay", inhalerUsage);
+        mergedHealth.put("isSmokerOrVaper", isSmoke);
+        mergedHealth.put("prescribedDosesPerDay", prescribedDoses);
+        mergedHealth.put("medications", medications);
+        mergedHealth.put("allergyDetails", allergyDetails);
+        HealthPrefs.saveFromHealthMap(this, mergedHealth);
+        ProfilePrefs.prefs(this).edit()
+                .putInt(ProfilePrefs.KEY_PRESCRIBED_DOSES, prescribedDoses)
+                .putString(ProfilePrefs.KEY_MEDICATIONS, medications)
+                .putString(ProfilePrefs.KEY_EMERGENCY_NAME, emergencyName)
+                .putString(ProfilePrefs.KEY_EMERGENCY_RELATION, emergencyRelation)
+                .putString(ProfilePrefs.KEY_EMERGENCY_PHONE, emergencyPhone)
+                .apply();
+
+        // 2. Update only these fields in Firestore (dotted keys); the rest of healthProfile
+        //    (onboarding answers) is kept.
         Map<String, Object> updates = new HashMap<>();
         updates.put("fullName", name);
         updates.put("username", username);

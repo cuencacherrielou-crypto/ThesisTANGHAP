@@ -17,7 +17,6 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <!-- Android <=11 scanning requirement -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
@@ -26,17 +25,12 @@
 
     <application
         android:name=".TanghapApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="TANGHAP"
         android:supportsRtl="true"
         android:largeHeap="true"
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.Tanghap">
-
-        <!-- Google Maps API Key -->
-        <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="YOUR_MAPS_API_KEY_HERE" />
 
         <meta-data android:name="com.facebook.sdk.ApplicationId" android:value="@string/facebook_app_id"/>
         <meta-data android:name="com.facebook.sdk.ClientToken" android:value="@string/facebook_client_token"/>
@@ -80,7 +74,7 @@
         <activity android:name=".ui.OnboardingActivity"/>
         <activity android:name=".ui.RegisterActivity"/>
         <activity android:name=".ui.LoginActivity"
-            android:exported="true"/>
+            android:exported="false"/>
         <activity
             android:name=".ui.SplashActivity"
             android:exported="true">

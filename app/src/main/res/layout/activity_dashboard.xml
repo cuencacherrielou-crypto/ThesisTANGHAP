@@ -189,15 +189,16 @@
                                 android:orientation="horizontal"
                                 android:gravity="center_vertical">
                                 <TextView
+                                    android:id="@+id/tvSensorStatus"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="@string/sensor_synced"
+                                    android:text="@string/sensor_no_session"
                                     android:textColor="@color/bg_main"
                                     android:alpha="0.8"/>
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text=" • "
+                                    android:text="@string/bullet_separator"
                                     android:textColor="@color/bg_main"
                                     android:alpha="0.8"/>
                                 <ImageView
@@ -212,7 +213,7 @@
                                     android:id="@+id/tvDashboardBattery"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="--%"
+                                    android:text="@string/battery_unknown"
                                     android:textColor="@color/bg_main"
                                     android:textSize="15sp"
                                     android:textStyle="bold"

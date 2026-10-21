@@ -3,10 +3,8 @@ package com.sti.tanghap.data;
 import android.content.Context;
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.sti.tanghap.data.AppDatabase;
-import com.sti.tanghap.data.SessionDao;
-import com.sti.tanghap.data.SessionEntity;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,32 +19,18 @@ public class SessionRepository {
         dao = AppDatabase.getInstance(ctx).sessionDao();
     }
 
-    public void saveLocal(SessionEntity s) {
-        if (s.userId == null && auth.getCurrentUser() != null) {
-            s.userId = auth.getCurrentUser().getUid();
-        }
-        dao.insert(s);
-    }
-
-    public List<SessionEntity> getAll() {
-        if (auth.getCurrentUser() != null) {
-            return dao.getAllForUser(auth.getCurrentUser().getUid());
-        }
-        return java.util.Collections.emptyList();
-    }
-
-    public List<SessionEntity> getUnsynced() {
-        return dao.getUnsynced();
-    }
-
-    public void markSynced(String id) {
-        dao.markSynced(id);
+    /** Unsynced sessions that belong to the signed-in user only. */
+    public List<SessionEntity> getUnsyncedForCurrentUser() {
+        if (auth.getCurrentUser() == null) return java.util.Collections.emptyList();
+        return dao.getUnsyncedForUser(auth.getCurrentUser().getUid());
     }
 
     // Synchronous upload for WorkManager
     public void uploadSessionSync(SessionEntity s) throws Exception {
         if (auth.getCurrentUser() == null) return;
         String uid = auth.getCurrentUser().getUid();
+        // Never upload another account's session into this user's Firestore folder
+        if (!uid.equals(s.userId)) return;
 
         Map<String, Object> data = createSessionMap(s);
 
@@ -54,25 +38,26 @@ public class SessionRepository {
         Tasks.await(fs.collection("users").document(uid)
                 .collection("sessions").document(s.id)
                 .set(data), 30, TimeUnit.SECONDS);
-        
-        markSynced(s.id);
+
+        dao.markSynced(s.id);
     }
 
     // Async version for UI
     public void uploadSession(SessionEntity s) {
         if (auth.getCurrentUser() == null) return;
         String uid = auth.getCurrentUser().getUid();
-        
+
         if (s.userId == null) {
             s.userId = uid;
         }
+        if (!uid.equals(s.userId)) return;
 
         Map<String, Object> data = createSessionMap(s);
 
         fs.collection("users").document(uid)
                 .collection("sessions").document(s.id)
                 .set(data)
-                .addOnSuccessListener(v -> markSynced(s.id));
+                .addOnSuccessListener(v -> new Thread(() -> dao.markSynced(s.id)).start());
     }
 
     public void syncUserSessionsFromFirestore() {
@@ -85,36 +70,42 @@ public class SessionRepository {
                 .addOnSuccessListener(querySnapshots -> {
                     if (querySnapshots != null && !querySnapshots.isEmpty()) {
                         new Thread(() -> {
-                            for (com.google.firebase.firestore.DocumentSnapshot doc : querySnapshots.getDocuments()) {
-                                SessionEntity s = new SessionEntity(doc.getId());
-                                s.userId = uid;
-                                Long start = doc.getLong("startTimeMillis");
-                                s.startTimeMillis = start != null ? start : System.currentTimeMillis();
-                                Long end = doc.getLong("endTimeMillis");
-                                s.endTimeMillis = end != null ? end : System.currentTimeMillis();
-                                Double peak = doc.getDouble("peakPressureKpa");
-                                s.peakPressureKpa = peak != null ? peak.floatValue() : 0.0f;
-                                Long bpm = doc.getLong("averageBpm");
-                                s.averageBpm = bpm != null ? bpm.intValue() : 0;
-                                s.detectedPattern = doc.getString("detectedPattern");
-                                s.aiPreliminaryInsight = doc.getString("aiPreliminaryInsight");
-                                s.aiObservations = doc.getString("aiObservations");
-                                Long cough = doc.getLong("coughCount");
-                                s.coughCount = cough != null ? cough.intValue() : 0;
-                                Long act = doc.getLong("actuationCount");
-                                s.actuationCount = act != null ? act.intValue() : 0;
-                                Long inhale = doc.getLong("inhaleDurationMillis");
-                                s.inhaleDurationMillis = inhale != null ? inhale : 0;
-                                s.otcRecommendation = doc.getString("otcRecommendation");
-                                Boolean risk = doc.getBoolean("riskLevelHigh");
-                                s.riskLevelHigh = risk != null && risk;
-                                s.synced = true;
-
-                                dao.insert(s);
+                            for (DocumentSnapshot doc : querySnapshots.getDocuments()) {
+                                dao.insert(fromDocument(doc, uid));
                             }
                         }).start();
                     }
                 });
+    }
+
+    private static SessionEntity fromDocument(DocumentSnapshot doc, String uid) {
+        SessionEntity s = new SessionEntity(doc.getId());
+        s.userId = uid;
+        Long start = doc.getLong("startTimeMillis");
+        s.startTimeMillis = start != null ? start : System.currentTimeMillis();
+        Long end = doc.getLong("endTimeMillis");
+        s.endTimeMillis = end != null ? end : s.startTimeMillis;
+        Double peak = doc.getDouble("peakPressureKpa");
+        s.peakPressureKpa = peak != null ? peak.floatValue() : 0.0f;
+        Long inhale = doc.getLong("inhaleDurationMillis");
+        s.inhaleDurationMillis = inhale != null ? inhale : 0L;
+        Long bpm = doc.getLong("averageBpm");
+        s.averageBpm = bpm != null ? bpm.intValue() : 0;
+        Long cough = doc.getLong("coughCount");
+        s.coughCount = cough != null ? cough.intValue() : 0;
+        Long act = doc.getLong("actuationCount");
+        s.actuationCount = act != null ? act.intValue() : 0;
+        s.detectedPattern = doc.getString("detectedPattern");
+        s.coughFinding = doc.getString("coughFinding");
+        s.aiPreliminaryInsight = doc.getString("aiPreliminaryInsight");
+        s.aiObservations = doc.getString("aiObservations");
+        s.otcRecommendation = doc.getString("otcRecommendation");
+        s.riskLevelHigh = Boolean.TRUE.equals(doc.getBoolean("riskLevelHigh"));
+        s.baselineComparison = doc.getString("baselineComparison");
+        s.recommendation = doc.getString("recommendation");
+        s.pressureTrace = doc.getString("pressureTrace");
+        s.synced = true;
+        return s;
     }
 
     private Map<String, Object> createSessionMap(SessionEntity s) {
@@ -126,7 +117,7 @@ public class SessionRepository {
         data.put("inhaleDurationMillis", s.inhaleDurationMillis);
         data.put("coughCount", s.coughCount);
         data.put("actuationCount", s.actuationCount);
-        
+
         // AI & Analysis fields
         data.put("averageBpm", s.averageBpm);
         data.put("detectedPattern", s.detectedPattern);
@@ -137,7 +128,8 @@ public class SessionRepository {
         data.put("riskLevelHigh", s.riskLevelHigh);
         data.put("baselineComparison", s.baselineComparison);
         data.put("recommendation", s.recommendation);
-        
+        data.put("pressureTrace", s.pressureTrace);
+
         return data;
     }
 }

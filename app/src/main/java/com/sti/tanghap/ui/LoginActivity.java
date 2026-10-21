@@ -18,7 +18,6 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
@@ -44,6 +43,7 @@ import com.google.firebase.auth.FacebookAuthProvider;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException;
 import com.google.firebase.auth.FirebaseAuthInvalidUserException;
+import com.google.firebase.auth.FirebaseAuthUserCollisionException;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -187,7 +187,9 @@ public class LoginActivity extends AppCompatActivity {
             @Override
             public void onError(@NonNull FacebookException error) {
                 setLoading(false);
-                Toast.makeText(LoginActivity.this, "Facebook Error: " + error.getMessage(), Toast.LENGTH_SHORT).show();
+                // Shows Meta's reason, e.g. invalid key hash, app not live, or invalid scopes
+                Log.e(TAG, "Facebook Login error", error);
+                Toast.makeText(LoginActivity.this, "Facebook Error: " + error.getMessage(), Toast.LENGTH_LONG).show();
             }
         });
     }
@@ -226,13 +228,10 @@ public class LoginActivity extends AppCompatActivity {
     private void signInWithFacebook() {
         if (!checkTerms()) return;
         setLoading(true);
-        LoginManager.getInstance().logInWithReadPermissions(this, Arrays.asList("email", "public_profile"));
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (callbackManager != null) callbackManager.onActivityResult(requestCode, resultCode, data);
+        // Drop any cached Facebook session so the user can pick the account
+        LoginManager.getInstance().logOut();
+        // Activity Result API overload: the result goes straight to callbackManager
+        LoginManager.getInstance().logInWithReadPermissions(this, callbackManager, Arrays.asList("email", "public_profile"));
     }
 
     private void firebaseAuthWithSocial(AuthCredential credential) {
@@ -249,8 +248,16 @@ public class LoginActivity extends AppCompatActivity {
             } else {
                 setLoading(false);
                 Log.e(TAG, "Firebase Social Auth Failed", task.getException());
-                String msg = task.getException() != null ? task.getException().getMessage() : "Authentication Failed.";
-                Toast.makeText(this, "Auth Error: " + msg, Toast.LENGTH_LONG).show();
+                String msg;
+                if (task.getException() instanceof FirebaseAuthUserCollisionException) {
+                    msg = "This email is already registered with another sign-in method. "
+                            + "Sign in with your email/password or Google instead.";
+                } else {
+                    msg = "Auth Error: " + (task.getException() != null
+                            ? task.getException().getMessage() : "Authentication Failed.");
+                }
+                LoginManager.getInstance().logOut();
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
             }
         });
     }

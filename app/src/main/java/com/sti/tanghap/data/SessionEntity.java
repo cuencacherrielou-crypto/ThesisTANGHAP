@@ -33,6 +33,9 @@ public class SessionEntity {
 
     public String recommendation;
 
+    // Down-sampled recorded pressure trace (comma-separated kPa values) for the result chart
+    public String pressureTrace;
+
     public SessionEntity(@NonNull String id) {
         this.id = id;
     }
