@@ -38,6 +38,7 @@ public class SessionResultActivity extends AppCompatActivity {
     private TextView tvAiFindings, tvAiObservations, tvOtcRecommendation, tvBaselineComparison;
     private View layoutOtc;
     private MaterialButton btnNearbyHospitals;
+    private MaterialButton btnCallEmergency;
     private LineChart chartResultPattern;
     private String currentSessionId;
 
@@ -65,6 +66,7 @@ public class SessionResultActivity extends AppCompatActivity {
         tvBaselineComparison = findViewById(R.id.tvBaselineComparison);
         layoutOtc = findViewById(R.id.layoutOtc);
         btnNearbyHospitals = findViewById(R.id.btnNearbyHospitals);
+        btnCallEmergency = findViewById(R.id.btnCallEmergency);
 
         chartResultPattern = findViewById(R.id.chartResultPattern);
 
@@ -114,6 +116,11 @@ public class SessionResultActivity extends AppCompatActivity {
         // EXTRACT SENSOR METRICS FROM INTENT EXTRAS
         int actuationCount = getIntent().getIntExtra("actuationCount", 0);
         int coughCount = getIntent().getIntExtra("coughCount", 0);
+        long startMillis = getIntent().getLongExtra("startTimeMillis", System.currentTimeMillis());
+        long endMillis = getIntent().getLongExtra("endTimeMillis", System.currentTimeMillis());
+        long inhaleMillis = getIntent().getLongExtra("inhaleDurationMillis", 0L);
+        boolean riskHigh = getIntent().getBooleanExtra("riskLevelHigh", false);
+        String otcRecommendation = getIntent().getStringExtra("otcRecommendation");
 
         if (breathingRateStr != null || aiFindings != null) {
             int bpmVal = 0;
@@ -130,7 +137,11 @@ public class SessionResultActivity extends AppCompatActivity {
                 newSession.userId = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser().getUid();
             }
 
-            newSession.startTimeMillis = System.currentTimeMillis();
+            newSession.startTimeMillis = startMillis;
+            newSession.endTimeMillis = endMillis;
+            newSession.inhaleDurationMillis = inhaleMillis;
+            newSession.riskLevelHigh = riskHigh;
+            newSession.otcRecommendation = otcRecommendation;
             newSession.peakPressureKpa = maxEffort;
             newSession.averageBpm = bpmVal;
             newSession.detectedPattern = breathingPattern != null ? breathingPattern : "Normal";
@@ -224,6 +235,7 @@ public class SessionResultActivity extends AppCompatActivity {
             btnNearbyHospitals.setVisibility(View.GONE);
             tvAiFindings.setTextColor(ContextCompat.getColor(this, R.color.text_high_emphasis));
         }
+        EmergencyContactButton.bind(this, btnCallEmergency, session.riskLevelHigh);
     }
 
     private void displayBaselineComparison(SessionEntity session, BaselineCalculator.Baseline baseline) {

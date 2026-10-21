@@ -24,6 +24,9 @@ public class DashboardActivity extends AppCompatActivity {
         setContentView(R.layout.activity_dashboard);
 
         com.sti.tanghap.sync.SyncScheduler.schedulePeriodicSync(this);
+        com.sti.tanghap.notify.NotificationHelper.ensureChannel(this);
+        com.sti.tanghap.notify.DoseReminderWorker.schedule(this);
+        requestNotificationPermissionIfNeeded();
         new com.sti.tanghap.data.SessionRepository(this).syncUserSessionsFromFirestore();
 
         TextView tvUser = findViewById(R.id.tvUser);
@@ -140,11 +143,25 @@ public class DashboardActivity extends AppCompatActivity {
         popup.show();
     }
 
+    private static final int REQ_NOTIFICATIONS = 4101;
+
+    /** Android 13+ needs runtime permission to show alerts as phone notifications. */
+    private void requestNotificationPermissionIfNeeded() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU
+                && androidx.core.content.ContextCompat.checkSelfPermission(this,
+                        android.Manifest.permission.POST_NOTIFICATIONS)
+                        != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            androidx.core.app.ActivityCompat.requestPermissions(this,
+                    new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFICATIONS);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private void syncHealthProfileFromFirestore(String uid) {
         com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("users").document(uid).get()
                 .addOnSuccessListener(doc -> {
                     if (doc.exists()) {
+                        com.sti.tanghap.data.ProfilePrefs.syncFromUserDoc(this, doc.getData());
                         java.util.Map<String, Object> healthMap = (java.util.Map<String, Object>) doc.get("healthProfile");
                         if (healthMap != null) {
                             java.util.List<String> conditions = (java.util.List<String>) healthMap.get("diagnosedConditions");

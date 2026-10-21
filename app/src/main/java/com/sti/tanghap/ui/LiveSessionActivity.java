@@ -5,6 +5,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
@@ -30,7 +32,10 @@ import com.sti.tanghap.ai.BreathingAnalyzer;
 import com.sti.tanghap.ble.ble.BleDeviceItem;
 import com.sti.tanghap.ble.ble.BleListener;
 import com.sti.tanghap.ble.ble.BleManager;
+import com.sti.tanghap.data.ConnectionLog;
 import com.sti.tanghap.domain.CoughAnalyzer;
+import com.sti.tanghap.domain.InhalationTracker;
+import com.sti.tanghap.notify.NotificationHelper;
 
 import org.json.JSONObject;
 
@@ -65,10 +70,22 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
     private TextView tvAiFindings, tvAiObservations, tvOtcRecommendation;
     private View layoutOtc;
     private MaterialButton btnNearbyHospitals;
+    private MaterialButton btnCallEmergency;
     private AiCoughClassifier aiCoughClassifier;
     private final BreathingAnalyzer breathingAnalyzer = new BreathingAnalyzer();
     private final AssessmentEngine assessmentEngine = new AssessmentEngine();
     private final CoughAnalyzer coughAnalyzer = new CoughAnalyzer();
+    private final InhalationTracker inhalationTracker = new InhalationTracker();
+    private AssessmentEngine.AssessmentResult lastAssessment;
+    private String lastOtcLabel;
+    private long sessionStartMillis;
+    private boolean sessionEndedByUser = false;
+    private boolean worseningNotified = false;
+    private String deviceAddress;
+    private int reconnectAttempts = 0;
+    private static final int MAX_RECONNECT_ATTEMPTS = 5;
+    private static final long RECONNECT_DELAY_MS = 3000;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private LineDataSet breathingDataSet;
     private BarDataSet coughDataSet;
@@ -126,6 +143,7 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
         sessionPressureData.clear();
         coughEntries.clear();
         aiCoughLabel = "Analyzing respiration pattern...";
+        sessionStartMillis = System.currentTimeMillis();
 
         try {
             aiCoughClassifier = new AiCoughClassifier(this);
@@ -144,6 +162,7 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
         tvOtcRecommendation = findViewById(R.id.tvOtcRecommendation);
         layoutOtc = findViewById(R.id.layoutOtc);
         btnNearbyHospitals = findViewById(R.id.btnNearbyHospitals);
+        btnCallEmergency = findViewById(R.id.btnCallEmergency);
 
         chartBreathing = findViewById(R.id.chartBreathingPattern);
         chartCough = findViewById(R.id.chartCough);
@@ -168,7 +187,7 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
 
         ble = new BleManager(this, this);
 
-        String deviceAddress = getIntent().getStringExtra("deviceAddress");
+        deviceAddress = getIntent().getStringExtra("deviceAddress");
         if (deviceAddress == null || deviceAddress.isEmpty()) {
             deviceAddress = "E0:72:A1:6F:E7:CE";
         }
@@ -185,9 +204,11 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
     }
 
     private void endSessionAndProceed() {
+        sessionEndedByUser = true;
         if (ble != null) {
             ble.disconnect();
         }
+        inhalationTracker.finish();
 
         saveSessionToPreferences();
 
@@ -199,6 +220,11 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
         intent.putExtra("aiObservations", tvAiObservations != null ? tvAiObservations.getText().toString() : "N/A");
         intent.putExtra("actuationCount", totalActuationCount);
         intent.putExtra("coughCount", recentCoughs.size());
+        intent.putExtra("startTimeMillis", sessionStartMillis);
+        intent.putExtra("endTimeMillis", System.currentTimeMillis());
+        intent.putExtra("inhaleDurationMillis", inhalationTracker.getAverageInhaleMillis());
+        intent.putExtra("riskLevelHigh", hasPredicted && lastAssessment != null && lastAssessment.recommendHospital);
+        if (hasPredicted && lastOtcLabel != null) intent.putExtra("otcRecommendation", lastOtcLabel);
 
         startActivity(intent);
         finish();
@@ -260,7 +286,9 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
 
     @Override
     public void onPressureSamples(float[] kpaSamples) {
+        final long arrival = System.currentTimeMillis();
         runOnUiThread(() -> {
+            inhalationTracker.addSamples(kpaSamples, arrival);
             float currentPeak = 0;
 
             for (float val : kpaSamples) {
@@ -311,8 +339,10 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
         if (!hasPredicted) {
             conditionIndication = "Standard Respiratory Evaluation";
         } else {
-            if (labelLower.contains("persistent")) {
-                conditionIndication = "COPD Assessment";
+            if (labelLower.contains("wheez")) {
+                conditionIndication = "Early Detection of Asthma";
+            } else if (labelLower.contains("persistent")) {
+                conditionIndication = baselineCOPD ? "COPD Assessment" : "Bronchitis Pattern Recognition";
             } else if (labelLower.contains("wet") || ct == CoughAnalyzer.CoughType.WET) {
                 conditionIndication = "Bronchitis Pattern Recognition";
             } else if (labelLower.contains("dry") || ct == CoughAnalyzer.CoughType.DRY) {
@@ -325,7 +355,9 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
         }
 
         AssessmentEngine.AssessmentResult assessment = assessmentEngine.generatePreliminaryAssessment(
-                br, ct, baselineAsthma, baselineCOPD, baselineCongestion);
+                br, ct, hasPredicted ? aiCoughLabel : null, baselineAsthma, baselineCOPD, baselineCongestion);
+        lastAssessment = assessment;
+        if (hasPredicted) lastOtcLabel = conditionIndication;
 
         if (tvAiFindings != null) {
             tvAiFindings.setText(aiCoughLabel);
@@ -344,10 +376,21 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
             tvOtcRecommendation.setText(conditionIndication);
         }
 
-        if (hasPredicted && assessment.recommendHospital && btnNearbyHospitals != null) {
+        boolean worsening = hasPredicted && assessment.recommendHospital;
+        if (worsening && btnNearbyHospitals != null) {
             btnNearbyHospitals.setVisibility(View.VISIBLE);
         } else if (btnNearbyHospitals != null) {
             btnNearbyHospitals.setVisibility(View.GONE);
+        }
+        EmergencyContactButton.bind(this, btnCallEmergency, worsening);
+
+        if (worsening && !worseningNotified) {
+            worseningNotified = true;
+            NotificationHelper.show(this, NotificationHelper.ID_WORSENING,
+                    "Worsening respiratory pattern",
+                    assessment.possibleFindings.isEmpty()
+                            ? "Readings suggest a worsening condition. Open TANGHAP for guidance."
+                            : assessment.possibleFindings.get(0) + " Open TANGHAP for guidance.");
         }
 
         if (sessionPressureData.size() > 500) sessionPressureData.subList(0, 200).clear();
@@ -536,7 +579,9 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
                                 String formattedLabel = rawPrediction.replace("_", " ");
                                 formattedLabel = formattedLabel.substring(0, 1).toUpperCase() + formattedLabel.substring(1);
 
-                                final String displayResult = "Cough Detected: " + formattedLabel;
+                                final String displayResult = rawPrediction.contains("wheez")
+                                        ? "Wheezing Detected"
+                                        : "Cough Detected: " + formattedLabel;
 
                                 runOnUiThread(() -> {
                                     hasPredicted = true;
@@ -611,12 +656,37 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
 
     @Override
     public void onConnected(String deviceName) {
-        runOnUiThread(() -> Toast.makeText(this, "Connected to TANGHAP", Toast.LENGTH_SHORT).show());
+        final boolean wasReconnecting = reconnectAttempts > 0;
+        reconnectAttempts = 0;
+        runOnUiThread(() -> Toast.makeText(this,
+                wasReconnecting ? "Reconnected to TANGHAP" : "Connected to TANGHAP",
+                Toast.LENGTH_SHORT).show());
     }
 
     @Override
     public void onDisconnected() {
-        runOnUiThread(() -> Toast.makeText(this, "Disconnected", Toast.LENGTH_SHORT).show());
+        if (sessionEndedByUser) return;
+        final long droppedAt = System.currentTimeMillis();
+        mainHandler.post(() -> {
+            if (sessionEndedByUser) return;
+            if (reconnectAttempts == 0) {
+                // First drop only; failed reconnect attempts also land here and should not repeat the alert.
+                ConnectionLog.recordDisconnect(this, droppedAt);
+                NotificationHelper.show(this, NotificationHelper.ID_CONNECTION,
+                        "TANGHAP device disconnected",
+                        "The inhaler attachment lost its Bluetooth connection. Keep your phone within range; the app will try to reconnect.");
+            }
+            if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                Toast.makeText(this, "Could not reconnect. Please scan for the device again.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            reconnectAttempts++;
+            Toast.makeText(this, "Device disconnected. Reconnecting (attempt " + reconnectAttempts
+                    + " of " + MAX_RECONNECT_ATTEMPTS + ")...", Toast.LENGTH_SHORT).show();
+            mainHandler.postDelayed(() -> {
+                if (!sessionEndedByUser && ble != null) ble.connect(deviceAddress);
+            }, RECONNECT_DELAY_MS);
+        });
     }
 
     @Override public void onScanResults(List<BleDeviceItem> results) {}
@@ -641,6 +711,8 @@ public class LiveSessionActivity extends AppCompatActivity implements BleListene
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        sessionEndedByUser = true;
+        mainHandler.removeCallbacksAndMessages(null);
         if (ble != null) {
             ble.disconnect();
         }

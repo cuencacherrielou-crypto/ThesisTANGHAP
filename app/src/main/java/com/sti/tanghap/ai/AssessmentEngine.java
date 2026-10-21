@@ -19,6 +19,7 @@ public class AssessmentEngine {
         public boolean recommendHospital;
         public boolean recommendClinic;
         public boolean recommendPharmacy;
+        public boolean wheezeDetected;
 
         public AssessmentResult() {}
     }
@@ -29,9 +30,28 @@ public class AssessmentEngine {
             boolean hasHistoryOfAsthma,
             boolean hasHistoryOfCOPD,
             boolean hasMildCongestion) {
+        return generatePreliminaryAssessment(breathing, coughType, null,
+                hasHistoryOfAsthma, hasHistoryOfCOPD, hasMildCongestion);
+    }
+
+    /**
+     * @param serverSoundLabel the label returned by the Flask sound classifier
+     *                         (for example "wheezing", "wet_cough"); null when unavailable.
+     */
+    public AssessmentResult generatePreliminaryAssessment(
+            BreathingAnalyzer.BreathingResult breathing,
+            CoughAnalyzer.CoughType coughType,
+            String serverSoundLabel,
+            boolean hasHistoryOfAsthma,
+            boolean hasHistoryOfCOPD,
+            boolean hasMildCongestion) {
 
         AssessmentResult result = new AssessmentResult();
-        String predictedCough = (coughType != null) ? coughType.name().toLowerCase() : "";
+        String serverLabel = serverSoundLabel != null ? serverSoundLabel.toLowerCase() : "";
+        // Combine the on-device cough type with the server's sound label so labels such as
+        // "wheezing" or "persistent" reach the rules below.
+        String predictedCough = ((coughType != null) ? coughType.name().toLowerCase() : "") + " " + serverLabel;
+        result.wheezeDetected = serverLabel.contains("wheez");
 
         // 1. PNEUMONIA SYMPTOM INDICATION (High BPM > 24 / Severe or Deep Cough)
         if (breathing.bpm > 24 || predictedCough.contains("severe") || coughType == CoughAnalyzer.CoughType.SEVERE) {
@@ -42,7 +62,7 @@ public class AssessmentEngine {
             result.recommendHospital = true; // Shows hospital button for critical state
         }
         // 2. ASTHMA ATTACK EPISODE (Wheezing Sound / Rapid Breathing + Asthma Baseline)
-        else if (predictedCough.contains("wheezing") ||
+        else if (result.wheezeDetected ||
                 (hasHistoryOfAsthma && (breathing.bpm > 20 || coughType == CoughAnalyzer.CoughType.FREQUENT))) {
             result.possibleFindings.add("Cough patterns potentially associated with an asthma-like respiratory episode.");
             result.observations.add("High-pitched whistling/wheezing sound or elevated inhalation cycles detected.");
@@ -54,6 +74,7 @@ public class AssessmentEngine {
         else if (hasHistoryOfCOPD &&
                 (coughType == CoughAnalyzer.CoughType.FREQUENT
                         || coughType == CoughAnalyzer.CoughType.WET
+                        || predictedCough.contains("persistent")
                         || breathing.bpm > 20)) {
             result.possibleFindings.add("Respiratory patterns possibly associated with COPD-related changes.");
             result.observations.add("Frequent or productive coughing, or an elevated breathing rate, detected in a user with a COPD history.");
@@ -77,10 +98,8 @@ public class AssessmentEngine {
         else {
             result.possibleFindings.add("Respiratory metrics remain within baseline parameters.");
             result.observations.add("Normal breathing rhythm and standard acoustic spectral profile detected.");
-            if (hasMildCongestion) {
-                result.otcCategory = "Antihistamines (for mild congestion)";
-                result.recommendPharmacy = true;
-            } else if (coughType == CoughAnalyzer.CoughType.DRY) {
+            // Allergies are background information only; OTC guidance is given for coughs only.
+            if (coughType == CoughAnalyzer.CoughType.DRY) {
                 result.otcCategory = "Cough Suppressants (for non-productive cough)";
                 result.recommendPharmacy = true;
             } else {

@@ -103,6 +103,11 @@ public class SessionRepository {
                                 s.coughCount = cough != null ? cough.intValue() : 0;
                                 Long act = doc.getLong("actuationCount");
                                 s.actuationCount = act != null ? act.intValue() : 0;
+                                Long inhale = doc.getLong("inhaleDurationMillis");
+                                s.inhaleDurationMillis = inhale != null ? inhale : 0;
+                                s.otcRecommendation = doc.getString("otcRecommendation");
+                                Boolean risk = doc.getBoolean("riskLevelHigh");
+                                s.riskLevelHigh = risk != null && risk;
                                 s.synced = true;
 
                                 dao.insert(s);
