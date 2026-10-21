@@ -62,6 +62,7 @@
         <activity android:name=".ui.AboutActivity" />
         <activity android:name=".ui.ChangePasswordActivity" />
         <activity android:name=".ui.EditProfileActivity" />
+        <activity android:name=".ui.HealthInfoActivity" />
         <activity android:name=".ui.SettingsActivity"/>
         <activity android:name=".ui.DoctorExportActivity"/>
         <activity android:name=".ui.AlertsActivity"/>

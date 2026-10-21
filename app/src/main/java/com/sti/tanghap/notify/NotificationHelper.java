@@ -15,6 +15,7 @@ import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 
 import com.sti.tanghap.R;
+import com.sti.tanghap.data.AppSettings;
 import com.sti.tanghap.ui.AlertsActivity;
 
 /** Posts TANGHAP system notifications for worsening readings, missed doses and connection issues. */
@@ -49,10 +50,15 @@ public final class NotificationHelper {
         return NotificationManagerCompat.from(ctx).areNotificationsEnabled();
     }
 
-    /** Shows a notification that opens the Alerts screen. Does nothing without permission. */
+    /** Whether the user left this kind of notification on in Settings. */
+    public static boolean enabledInSettings(Context ctx, int id) {
+        return id == ID_DOSE ? AppSettings.doseRemindersEnabled(ctx) : AppSettings.alertNotificationsEnabled(ctx);
+    }
+
+    /** Shows a notification that opens the Alerts screen. Does nothing without permission or when turned off in Settings. */
     @SuppressLint("MissingPermission")
     public static void show(Context ctx, int id, String title, String text) {
-        if (!canNotify(ctx)) return;
+        if (!enabledInSettings(ctx, id) || !canNotify(ctx)) return;
         ensureChannel(ctx);
 
         Intent open = new Intent(ctx, AlertsActivity.class);
