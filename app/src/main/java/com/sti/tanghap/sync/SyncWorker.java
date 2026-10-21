@@ -21,7 +21,7 @@ public class SyncWorker extends Worker {
     public Result doWork() {
         Log.d(TAG, "Starting sync process...");
         SessionRepository repo = new SessionRepository(getApplicationContext());
-        List<SessionEntity> unsynced = repo.getUnsynced();
+        List<SessionEntity> unsynced = repo.getUnsyncedForCurrentUser();
         
         try {
             for (SessionEntity s : unsynced) {

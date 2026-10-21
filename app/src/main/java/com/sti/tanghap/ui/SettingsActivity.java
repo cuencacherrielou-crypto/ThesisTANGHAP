@@ -11,6 +11,7 @@ import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.sti.tanghap.R;
+import com.sti.tanghap.data.HealthPrefs;
 import com.sti.tanghap.sync.SyncScheduler;
 
 public class SettingsActivity extends AppCompatActivity {
@@ -50,7 +51,11 @@ public class SettingsActivity extends AppCompatActivity {
 
         findViewById(R.id.btnLogout).setOnClickListener(v -> {
             FirebaseAuth.getInstance().signOut();
-            startActivity(new Intent(this, LoginActivity.class));
+            HealthPrefs.clearUserData(this);
+            com.facebook.login.LoginManager.getInstance().logOut();
+            Intent login = new Intent(this, LoginActivity.class);
+            login.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(login);
             finishAffinity();
         });
     }

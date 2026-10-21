@@ -18,6 +18,8 @@ import android.bluetooth.le.ScanSettings;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.ParcelUuid;
 import android.util.Log;
 
@@ -58,6 +60,12 @@ public class BleManager {
     private long lastScanUiUpdate = 0;
 
     private final Queue<BluetoothGattCharacteristic> notifyQueue = new ArrayDeque<>();
+
+    // GATT allows one operation at a time: discover services only after the MTU exchange finishes
+    private static final long MTU_TIMEOUT_MS = 1500;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private BluetoothGatt discoveryGatt;
+    private boolean discoveryStarted = false;
 
 
     // =========================================================
@@ -262,8 +270,10 @@ public class BleManager {
                 gatt = g;
                 lastActuationMillis = 0; // Reset debounce timer
 
-                // Request mas mataas na MTU para sa INMP441 Audio Stream
-                g.requestMtu(247);
+                synchronized (BleManager.this) {
+                    discoveryGatt = g;
+                    discoveryStarted = false;
+                }
 
                 String deviceName = "TANGHAP";
                 if (hasConnectPermission()) {
@@ -279,15 +289,21 @@ public class BleManager {
                 Log.d(TAG, "Connected to " + deviceName);
                 listener.onConnected(deviceName);
 
-                if (hasConnectPermission()) {
-                    Log.d(TAG, "Discovering services...");
-                    g.discoverServices();
+                // Request mas mataas na MTU para sa INMP441 Audio Stream.
+                // Service discovery starts in onMtuChanged (or after a timeout if no reply comes).
+                if (hasConnectPermission() && g.requestMtu(247)) {
+                    mainHandler.postDelayed(() -> discoverServicesOnce(g), MTU_TIMEOUT_MS);
+                } else {
+                    discoverServicesOnce(g);
                 }
 
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Log.d(TAG, "BLE disconnected.");
                 listener.onDisconnected();
                 notifyQueue.clear();
+                synchronized (BleManager.this) {
+                    if (discoveryGatt == g) discoveryGatt = null;
+                }
 
                 try {
                     g.close();
@@ -303,6 +319,7 @@ public class BleManager {
         @Override
         public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
             Log.d(TAG, "BLE MTU Size Changed to: " + mtu + " (Status: " + status + ")");
+            discoverServicesOnce(gatt);
         }
 
         @Override
@@ -367,6 +384,22 @@ public class BleManager {
             }
         }
     };
+
+
+    @SuppressLint("MissingPermission")
+    private void discoverServicesOnce(BluetoothGatt g) {
+        synchronized (this) {
+            // Ignore stale timeouts from an earlier connection, and run discovery only once
+            if (discoveryStarted || g != discoveryGatt) return;
+            discoveryStarted = true;
+        }
+        if (hasConnectPermission()) {
+            Log.d(TAG, "Discovering services...");
+            if (!g.discoverServices()) {
+                listener.onError("BLE service discovery could not start.");
+            }
+        }
+    }
 
 
     // =========================================================

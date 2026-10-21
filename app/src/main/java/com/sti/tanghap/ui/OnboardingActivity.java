@@ -21,6 +21,7 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.sti.tanghap.R;
+import com.sti.tanghap.data.HealthPrefs;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -111,30 +112,8 @@ public class OnboardingActivity extends AppCompatActivity {
                 });
     }
 
-    @SuppressWarnings("unchecked")
     private void saveToPreferences() {
-        android.content.SharedPreferences pref = getSharedPreferences("TanghapUserPreferences", MODE_PRIVATE);
-        android.content.SharedPreferences.Editor editor = pref.edit();
-
-        List<String> conditions = (List<String>) onboardingData.get("diagnosedConditions");
-        if (conditions != null) {
-            editor.putBoolean("has_asthma", conditions.contains("Asthma"));
-            editor.putBoolean("has_copd", conditions.contains("COPD"));
-            editor.putBoolean("has_bronchitis", conditions.contains("Bronchitis"));
-        } else {
-            editor.putBoolean("has_asthma", false);
-            editor.putBoolean("has_copd", false);
-            editor.putBoolean("has_bronchitis", false);
-        }
-
-        List<String> triggers = (List<String>) onboardingData.get("respiratoryTriggers");
-        boolean hasCongestion = triggers != null && (triggers.contains("Dust") || triggers.contains("Pollen"));
-        editor.putBoolean("has_congestion", hasCongestion);
-
-        String inhalerUsage = (String) onboardingData.get("inhalerUsageFreqPerDay");
-        editor.putString("inhaler_usage", inhalerUsage != null ? inhalerUsage : "None");
-
-        editor.apply();
+        HealthPrefs.saveFromHealthMap(this, onboardingData);
     }
 
     private void collectData() {

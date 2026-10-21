@@ -15,6 +15,10 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Flask cough-model server. Override with -Ptanghap.flaskUrl=http://<pc-ip>:5000/
+        val flaskUrl = (project.findProperty("tanghap.flaskUrl") as String?) ?: "http://192.168.1.5:5000/"
+        buildConfigField("String", "FLASK_BASE_URL", "\"$flaskUrl\"")
     }
 
     buildTypes {
@@ -34,6 +38,7 @@ android {
 
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 
@@ -59,20 +64,12 @@ dependencies {
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-crashlytics")
-    implementation("com.google.firebase:firebase-storage")
     implementation("com.google.firebase:firebase-analytics")
-
-    // Google Maps & Location
-    implementation("com.google.android.gms:play-services-maps:19.0.0")
-    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // Signal Processing (FFT)
     implementation("com.github.wendykierp:JTransforms:3.1")
 
-    // Modern Google ID/Credential Manager
-    implementation("androidx.credentials:credentials:1.6.0")
-    implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
-    implementation("com.google.android.libraries.identity.googleid:googleid:1.2.0")
+    // Google Sign-In
     implementation("com.google.android.gms:play-services-auth:21.3.0")
 
     // Facebook SDK

@@ -40,8 +40,16 @@
     <string name="tip_charge">Keep your device charged.</string>
     <string name="tanghap_activity">TANGHAP Activity</string>
     <string name="current_status">Current Status</string>
-    <string name="sensor_synced">Sensor properly synced</string>
+    <string name="sensor_last_session">Last session %1$s</string>
+    <string name="sensor_no_session">No sessions yet</string>
     <string name="ready_caps">READY</string>
+    <string name="not_paired_caps">NOT PAIRED</string>
+    <string name="bullet_separator">" • "</string>
+    <string name="battery_unknown" formatted="false">--%</string>
+    <string name="battery_percent">%1$d%%</string>
+    <string name="chart_no_sessions">Complete a session to see your pressure trend.</string>
+    <string name="menu_settings">Settings</string>
+    <string name="menu_logout">Logout</string>
     <string name="pressure_trends">Pressure Trends</string>
     <string name="patient_account">Patient Account</string>
     <string name="user_placeholder">User</string>

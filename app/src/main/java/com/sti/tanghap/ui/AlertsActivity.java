@@ -53,6 +53,12 @@ public class AlertsActivity extends AppCompatActivity {
         loadUserAndAlerts();
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        executor.shutdown();
+    }
+
     private void loadUserAndAlerts() {
         if (auth.getCurrentUser() == null) return;
 
@@ -77,20 +83,27 @@ public class AlertsActivity extends AppCompatActivity {
     }
 
     private void loadAlerts(int userAge) {
+        if (auth.getCurrentUser() == null) return;
+        String uid = auth.getCurrentUser().getUid();
         executor.execute(() -> {
-            String uid = auth.getCurrentUser() != null ? auth.getCurrentUser().getUid() : "";
-            List<SessionEntity> allSessions = AppDatabase.getInstance(this).sessionDao().getAllForUser(uid);
-            
-            // Logic for baseline (last 7 days)
             long now = System.currentTimeMillis();
-            Calendar cal = Calendar.getInstance();
-            cal.setTimeInMillis(now);
-            cal.add(Calendar.DAY_OF_YEAR, -7);
-            long since = cal.getTimeInMillis();
 
+            // This user's sessions only, newest first
+            List<SessionEntity> allSessions = AppDatabase.getInstance(this).sessionDao().getAllForUser(uid);
+            SessionEntity latest = allSessions.isEmpty() ? null : allSessions.get(0);
+
+            // Baseline = sessions in the 7 days before the latest one, excluding the latest itself
             ArrayList<SessionEntity> baselineList = new ArrayList<>();
-            for (SessionEntity s : allSessions) {
-                if (s.startTimeMillis >= since) baselineList.add(s);
+            if (latest != null) {
+                Calendar cal = Calendar.getInstance();
+                cal.setTimeInMillis(latest.startTimeMillis);
+                cal.add(Calendar.DAY_OF_YEAR, -7);
+                long since = cal.getTimeInMillis();
+                for (SessionEntity s : allSessions) {
+                    if (s != latest && s.startTimeMillis >= since && s.startTimeMillis < latest.startTimeMillis) {
+                        baselineList.add(s);
+                    }
+                }
             }
 
             BaselineCalculator.Baseline baseline = new BaselineCalculator().compute(baselineList);
@@ -101,8 +114,7 @@ public class AlertsActivity extends AppCompatActivity {
             int todayAct = 0;
             int todayBpm = 0;
 
-            if (!allSessions.isEmpty()) {
-                SessionEntity latest = allSessions.get(0);
+            if (latest != null) {
                 todayPeak = latest.peakPressureKpa;
                 todayInhale = latest.inhaleDurationMillis;
                 todayCough = latest.coughCount;
@@ -113,8 +125,7 @@ public class AlertsActivity extends AppCompatActivity {
             List<AlertEngine.Alert> alerts = new ArrayList<>();
 
             // Worsening finding from the most recent session
-            if (!allSessions.isEmpty() && allSessions.get(0).riskLevelHigh) {
-                SessionEntity latest = allSessions.get(0);
+            if (latest != null && latest.riskLevelHigh) {
                 alerts.add(new AlertEngine.Alert(
                         "Worsening respiratory pattern",
                         (latest.otcRecommendation != null ? latest.otcRecommendation + ": " : "")

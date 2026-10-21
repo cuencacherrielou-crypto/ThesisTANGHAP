@@ -72,16 +72,24 @@ public class HistoryTrendsActivity extends AppCompatActivity {
             String uid = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser() != null ?
                     com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser().getUid() : "";
             List<SessionEntity> all = AppDatabase.getInstance(this).sessionDao().getAllForUser(uid);
-            if (!all.isEmpty()) {
-                Intent intent = new Intent(this, DoctorExportActivity.class);
-                intent.putExtra("sessionId", all.get(0).id);
-                startActivity(intent);
-            } else {
-                runOnUiThread(() -> Toast.makeText(this, "No data to export", Toast.LENGTH_SHORT).show());
-            }
+            runOnUiThread(() -> {
+                if (!all.isEmpty()) {
+                    Intent intent = new Intent(this, DoctorExportActivity.class);
+                    intent.putExtra(DoctorExportActivity.EXTRA_EXPORT_ALL, true);
+                    startActivity(intent);
+                } else {
+                    Toast.makeText(this, "No data to export", Toast.LENGTH_SHORT).show();
+                }
+            });
         }));
 
         loadData();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        executor.shutdown();
     }
 
     private void setupCharts() {
@@ -190,8 +198,9 @@ public class HistoryTrendsActivity extends AppCompatActivity {
         List<Entry> pressureEntries = new ArrayList<>();
         List<BarEntry> coughEntries = new ArrayList<>();
 
+        // The list is newest first; charts read left (oldest) to right (newest)
         for (int i = 0; i < sessions.size(); i++) {
-            SessionEntity s = sessions.get(i);
+            SessionEntity s = sessions.get(sessions.size() - 1 - i);
             bpmEntries.add(new Entry(i, s.averageBpm));
             pressureEntries.add(new Entry(i, s.peakPressureKpa));
             coughEntries.add(new BarEntry(i, s.coughCount));
