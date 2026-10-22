@@ -6,7 +6,8 @@ import static org.junit.Assert.assertTrue;
 
 import com.sti.tanghap.ai.AssessmentEngine;
 import com.sti.tanghap.ai.BreathingAnalyzer;
-import com.sti.tanghap.domain.CoughAnalyzer;
+import com.sti.tanghap.ai.CoughClass;
+import com.sti.tanghap.ai.OtcGuidance;
 
 import org.junit.Test;
 
@@ -19,10 +20,10 @@ public class AssessmentEngineTest {
     }
 
     @Test
-    public void copdUserWithFrequentCough_getsCopdFinding() {
+    public void copdUserWithPersistentCough_getsCopdFinding() {
         AssessmentEngine.AssessmentResult r = engine.generatePreliminaryAssessment(
-                bpm(16), CoughAnalyzer.CoughType.FREQUENT, false, true, false);
-        assertEquals("COPD Assessment", r.otcCategory);
+                bpm(16), CoughClass.PERSISTENT_COUGH, false, true, false);
+        assertEquals(AssessmentEngine.CATEGORY_COPD, r.possibleCondition);
         assertTrue(r.recommendClinic);
         assertFalse(r.recommendHospital);
     }
@@ -30,66 +31,64 @@ public class AssessmentEngineTest {
     @Test
     public void copdUserWithRapidBreathing_getsCopdFinding() {
         AssessmentEngine.AssessmentResult r = engine.generatePreliminaryAssessment(
-                bpm(22), CoughAnalyzer.CoughType.NORMAL, false, true, false);
-        assertEquals("COPD Assessment", r.otcCategory);
+                bpm(22), null, false, true, false);
+        assertEquals(AssessmentEngine.CATEGORY_COPD, r.possibleCondition);
     }
 
     @Test
     public void userWithoutCopd_wetCough_staysBronchitis() {
         AssessmentEngine.AssessmentResult r = engine.generatePreliminaryAssessment(
-                bpm(16), CoughAnalyzer.CoughType.WET, false, false, false);
-        assertEquals("Bronchitis Pattern Recognition", r.otcCategory);
+                bpm(16), CoughClass.WET_COUGH, false, false, false);
+        assertEquals(AssessmentEngine.CATEGORY_BRONCHITIS, r.possibleCondition);
     }
 
     @Test
     public void severeCough_staysPneumoniaEvenWithCopd() {
         AssessmentEngine.AssessmentResult r = engine.generatePreliminaryAssessment(
-                bpm(16), CoughAnalyzer.CoughType.SEVERE, false, true, false);
-        assertEquals("Pneumonia Symptoms Indication", r.otcCategory);
+                bpm(16), CoughClass.SEVERE_COUGH, false, true, false);
+        assertEquals(AssessmentEngine.CATEGORY_PNEUMONIA, r.possibleCondition);
         assertTrue(r.recommendHospital);
     }
 
     @Test
     public void copdUserWithStableReadings_staysBaseline() {
         AssessmentEngine.AssessmentResult r = engine.generatePreliminaryAssessment(
-                bpm(16), CoughAnalyzer.CoughType.NORMAL, false, true, false);
-        assertEquals("Standard Respiratory Evaluation", r.otcCategory);
+                bpm(16), null, false, true, false);
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.possibleCondition);
     }
 
     @Test
     public void allergyHistory_doesNotRecommendMedicine() {
         AssessmentEngine.AssessmentResult r = engine.generatePreliminaryAssessment(
-                bpm(16), CoughAnalyzer.CoughType.NORMAL, false, false, true);
-        assertEquals("Standard Respiratory Evaluation", r.otcCategory);
+                bpm(16), null, false, false, true);
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.possibleCondition);
         assertFalse(r.recommendPharmacy);
     }
 
     // ---------- Unified rule set (single engine for live + saved session) ----------
 
-    private AssessmentEngine.AssessmentResult assess(int bpm, CoughAnalyzer.CoughType type, String label,
-                                                     int coughs, boolean asthma, boolean copd) {
-        return engine.generatePreliminaryAssessment(
-                BreathingAnalyzer.classify(bpm), type, label, coughs, asthma, copd, false);
+    private AssessmentEngine.AssessmentResult assess(int bpm, CoughClass cough, boolean asthma, boolean copd) {
+        return engine.generatePreliminaryAssessment(BreathingAnalyzer.classify(bpm), cough, asthma, copd, false);
     }
 
     @Test
     public void normalBreathingIsStandard() {
-        AssessmentEngine.AssessmentResult r = assess(16, CoughAnalyzer.CoughType.NORMAL, null, 0, false, false);
-        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.otcCategory);
+        AssessmentEngine.AssessmentResult r = assess(16, null, false, false);
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.possibleCondition);
         assertFalse(r.recommendHospital);
     }
 
     @Test
     public void normalRateIsNotBronchitis() {
         // 19 BPM is inside the normal 12-20 range
-        AssessmentEngine.AssessmentResult r = assess(19, CoughAnalyzer.CoughType.NORMAL, null, 0, false, false);
-        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.otcCategory);
+        AssessmentEngine.AssessmentResult r = assess(19, null, false, false);
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.possibleCondition);
     }
 
     @Test
     public void observationsOnlyDescribeMeasuredData() {
-        AssessmentEngine.AssessmentResult r = assess(26, CoughAnalyzer.CoughType.NORMAL, null, 0, false, false);
-        assertEquals(AssessmentEngine.CATEGORY_PNEUMONIA, r.otcCategory);
+        AssessmentEngine.AssessmentResult r = assess(26, null, false, false);
+        assertEquals(AssessmentEngine.CATEGORY_PNEUMONIA, r.possibleCondition);
         assertTrue(r.recommendHospital);
         for (String o : r.observations) {
             assertFalse(o, o.toLowerCase().contains("mucus"));
@@ -98,27 +97,48 @@ public class AssessmentEngineTest {
     }
 
     @Test
-    public void wheezingLabelFromModelIsAsthmaLike() {
-        AssessmentEngine.AssessmentResult r = assess(16, CoughAnalyzer.CoughType.DRY, "Wheezing", 1, false, false);
-        assertEquals(AssessmentEngine.CATEGORY_ASTHMA, r.otcCategory);
+    public void wheezingFromModelIsAsthmaLike() {
+        AssessmentEngine.AssessmentResult r = assess(16, CoughClass.WHEEZING, false, false);
+        assertEquals(AssessmentEngine.CATEGORY_ASTHMA, r.possibleCondition);
     }
 
     @Test
     public void persistentCoughWithCopdHistoryIsCopd() {
-        AssessmentEngine.AssessmentResult r = assess(16, CoughAnalyzer.CoughType.DRY, "Persistent cough", 2, false, true);
-        assertEquals(AssessmentEngine.CATEGORY_COPD, r.otcCategory);
+        AssessmentEngine.AssessmentResult r = assess(16, CoughClass.PERSISTENT_COUGH, false, true);
+        assertEquals(AssessmentEngine.CATEGORY_COPD, r.possibleCondition);
     }
 
     @Test
     public void wetCoughIsBronchitisPattern() {
-        AssessmentEngine.AssessmentResult r = assess(16, CoughAnalyzer.CoughType.DRY, "Wet cough", 1, false, false);
-        assertEquals(AssessmentEngine.CATEGORY_BRONCHITIS, r.otcCategory);
+        AssessmentEngine.AssessmentResult r = assess(16, CoughClass.WET_COUGH, false, false);
+        assertEquals(AssessmentEngine.CATEGORY_BRONCHITIS, r.possibleCondition);
         assertFalse(r.recommendHospital);
     }
 
     @Test
+    public void persistentCoughWithAsthmaHistoryIsAsthmaLike() {
+        AssessmentEngine.AssessmentResult r = assess(16, CoughClass.PERSISTENT_COUGH, true, false);
+        assertEquals(AssessmentEngine.CATEGORY_ASTHMA, r.possibleCondition);
+    }
+
+    @Test
+    public void dryCoughGetsCoughSuppressants() {
+        AssessmentEngine.AssessmentResult r = assess(16, CoughClass.DRY_COUGH, false, false);
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.possibleCondition);
+        assertEquals(OtcGuidance.DRY_COUGH, r.medicineKey);
+        assertTrue(r.recommendPharmacy);
+    }
+
+    @Test
+    public void nonCoughSoundIsStandard() {
+        AssessmentEngine.AssessmentResult r = assess(16, CoughClass.NON_COUGH, false, false);
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.possibleCondition);
+        assertFalse(r.recommendPharmacy);
+    }
+
+    @Test
     public void insightContainsGuidance() {
-        AssessmentEngine.AssessmentResult r = assess(16, CoughAnalyzer.CoughType.NORMAL, null, 0, false, false);
+        AssessmentEngine.AssessmentResult r = assess(16, null, false, false);
         assertTrue(r.insight.contains(r.guidance));
     }
 }

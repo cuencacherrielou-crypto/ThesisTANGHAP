@@ -278,7 +278,7 @@
             android:gravity="center"
             android:baselineAligned="false">
 
-            <!-- History -->
+            <!-- History &amp; Trends -->
             <FrameLayout
                 android:id="@+id/nav_history_container"
                 android:layout_width="0dp"
@@ -288,13 +288,28 @@
                 android:focusable="true"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/nav_history_desc">
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:layout_gravity="center"
-                    app:srcCompat="@drawable/ic_nav_history"
-                    app:tint="@color/text_low_emphasis"
-                    tools:ignore="ContentDescription" />
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        app:srcCompat="@drawable/ic_nav_history"
+                        app:tint="@color/text_medium_emphasis"
+                        tools:ignore="ContentDescription" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/nav_history_label"
+                        android:textColor="@color/text_medium_emphasis"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:importantForAccessibility="no" />
+                </LinearLayout>
             </FrameLayout>
 
             <!-- Alerts -->
@@ -307,16 +322,31 @@
                 android:focusable="true"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/nav_alerts_desc">
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:layout_gravity="center"
-                    app:srcCompat="@drawable/ic_nav_alerts"
-                    app:tint="@color/text_low_emphasis"
-                    tools:ignore="ContentDescription" />
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        app:srcCompat="@drawable/ic_nav_alerts"
+                        app:tint="@color/text_medium_emphasis"
+                        tools:ignore="ContentDescription" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/nav_alerts_label"
+                        android:textColor="@color/text_medium_emphasis"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:importantForAccessibility="no" />
+                </LinearLayout>
             </FrameLayout>
 
-            <!-- Centered Pulse (Live) -->
+            <!-- Centered Live Monitoring (breathing waveform) -->
             <FrameLayout
                 android:id="@+id/btnLive"
                 android:layout_width="64dp"
@@ -330,12 +360,12 @@
                     android:layout_width="28dp"
                     android:layout_height="28dp"
                     android:layout_gravity="center"
-                    app:srcCompat="@android:drawable/ic_menu_view"
+                    app:srcCompat="@drawable/ic_nav_live"
                     app:tint="@color/bg_main"
                     tools:ignore="ContentDescription" />
             </FrameLayout>
 
-            <!-- Report (NEW) -->
+            <!-- Today's Report -->
             <FrameLayout
                 android:id="@+id/nav_report_container"
                 android:layout_width="0dp"
@@ -345,16 +375,31 @@
                 android:focusable="true"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/nav_report_desc">
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:layout_gravity="center"
-                    app:srcCompat="@android:drawable/ic_menu_agenda"
-                    app:tint="@color/text_low_emphasis"
-                    tools:ignore="ContentDescription" />
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        app:srcCompat="@drawable/ic_nav_report"
+                        app:tint="@color/text_medium_emphasis"
+                        tools:ignore="ContentDescription" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/nav_report_label"
+                        android:textColor="@color/text_medium_emphasis"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:importantForAccessibility="no" />
+                </LinearLayout>
             </FrameLayout>
 
-            <!-- Scan -->
+            <!-- Connect Device -->
             <FrameLayout
                 android:id="@+id/nav_scan_container"
                 android:layout_width="0dp"
@@ -364,13 +409,28 @@
                 android:focusable="true"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/nav_scan_desc">
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:layout_gravity="center"
-                    app:srcCompat="@drawable/ic_nav_scan"
-                    app:tint="@color/text_low_emphasis"
-                    tools:ignore="ContentDescription" />
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        app:srcCompat="@drawable/ic_nav_scan"
+                        app:tint="@color/text_medium_emphasis"
+                        tools:ignore="ContentDescription" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/nav_scan_label"
+                        android:textColor="@color/text_medium_emphasis"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:importantForAccessibility="no" />
+                </LinearLayout>
             </FrameLayout>
 
         </LinearLayout>

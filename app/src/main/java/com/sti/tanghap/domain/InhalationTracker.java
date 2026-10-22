@@ -1,13 +1,35 @@
 package com.sti.tanghap.domain;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 /**
  * Measures inhalations from the BLE pressure stream.
  *
  * An inhalation is a run of consecutive samples whose absolute pressure is at or
  * above the threshold. Packets carry no per-sample timestamps, so the sample period
- * is estimated from packet arrival times and the number of samples received.
+ * is estimated from packet arrival times and the number of samples received, and each
+ * sample's time is estimated back from its packet's arrival time.
  */
 public class InhalationTracker {
+
+    /** One measured inhalation. */
+    public static final class Inhalation {
+        /** Estimated wall-clock start time, epoch milliseconds. */
+        public final long startMillis;
+        public final long durationMillis;
+        public final float peakKpa;
+
+        Inhalation(long startMillis, long durationMillis, float peakKpa) {
+            this.startMillis = startMillis;
+            this.durationMillis = durationMillis;
+            this.peakKpa = peakKpa;
+        }
+    }
+
+    /** Memory cap on the stored per-inhalation list (several hours of breathing). */
+    private static final int MAX_STORED_INHALATIONS = 5000;
 
     public static final float DEFAULT_THRESHOLD_KPA = 1.5f;
     /** Runs shorter than this are treated as noise, not an inhalation. */
@@ -25,6 +47,9 @@ public class InhalationTracker {
     private long totalInhaleSamples = 0;
     private int longestInhaleSamples = 0;
     private float peakEffortKpa = 0f;
+    private long currentRunStartMillis = 0;
+    private float currentRunPeakKpa = 0f;
+    private final List<Inhalation> inhalations = new ArrayList<>();
 
     public InhalationTracker() {
         this(DEFAULT_THRESHOLD_KPA);
@@ -36,14 +61,23 @@ public class InhalationTracker {
 
     public void addSamples(float[] kpaSamples, long arrivalMillis) {
         if (kpaSamples == null || kpaSamples.length == 0) return;
+        // Sample period known so far, used to date the samples inside this packet
+        float msPerSampleSoFar = msPerSample();
         if (firstArrivalMillis < 0) firstArrivalMillis = arrivalMillis;
         samplesBeforeLastPacket = totalSamples;
         lastArrivalMillis = arrivalMillis;
 
-        for (float v : kpaSamples) {
-            float abs = Math.abs(v);
+        int n = kpaSamples.length;
+        for (int i = 0; i < n; i++) {
+            float abs = Math.abs(kpaSamples[i]);
             if (abs > peakEffortKpa) peakEffortKpa = abs;
             if (abs >= thresholdKpa) {
+                if (currentRunSamples == 0) {
+                    // The last sample of a packet arrives with it; earlier ones are one period apart
+                    currentRunStartMillis = arrivalMillis - Math.round((n - 1 - i) * msPerSampleSoFar);
+                    currentRunPeakKpa = 0f;
+                }
+                if (abs > currentRunPeakKpa) currentRunPeakKpa = abs;
                 currentRunSamples++;
             } else {
                 closeRun();
@@ -62,6 +96,10 @@ public class InhalationTracker {
             inhalationCount++;
             totalInhaleSamples += currentRunSamples;
             if (currentRunSamples > longestInhaleSamples) longestInhaleSamples = currentRunSamples;
+            if (inhalations.size() < MAX_STORED_INHALATIONS) {
+                inhalations.add(new Inhalation(currentRunStartMillis,
+                        Math.round(currentRunSamples * msPerSample()), currentRunPeakKpa));
+            }
         }
         currentRunSamples = 0;
     }
@@ -87,5 +125,10 @@ public class InhalationTracker {
 
     public float getPeakEffortKpa() {
         return peakEffortKpa;
+    }
+
+    /** Every completed inhalation with its start time, oldest first. */
+    public List<Inhalation> getInhalations() {
+        return Collections.unmodifiableList(inhalations);
     }
 }

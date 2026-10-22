@@ -15,6 +15,7 @@ import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 
 import com.sti.tanghap.R;
+import com.sti.tanghap.data.AppSettings;
 import com.sti.tanghap.ui.AlertsActivity;
 
 /** Posts TANGHAP system notifications for worsening readings, missed doses and connection issues. */
@@ -49,14 +50,26 @@ public final class NotificationHelper {
         return NotificationManagerCompat.from(ctx).areNotificationsEnabled();
     }
 
-    /** Shows a notification that opens the Alerts screen. Does nothing without permission. */
-    @SuppressLint("MissingPermission")
+    /** Whether the user left this kind of notification on in Settings. */
+    public static boolean enabledInSettings(Context ctx, int id) {
+        return id == ID_DOSE ? AppSettings.doseRemindersEnabled(ctx) : AppSettings.alertNotificationsEnabled(ctx);
+    }
+
+    /** Shows a notification that opens the Alerts screen. Does nothing without permission or when turned off in Settings. */
     public static void show(Context ctx, int id, String title, String text) {
-        if (!canNotify(ctx)) return;
+        show(ctx, id, title, text, new Intent(ctx, AlertsActivity.class));
+    }
+
+    /**
+     * Shows a notification that opens the given screen. Does nothing without permission or
+     * when turned off in Settings.
+     */
+    @SuppressLint("MissingPermission")
+    public static void show(Context ctx, int id, String title, String text, Intent open) {
+        if (!enabledInSettings(ctx, id) || !canNotify(ctx)) return;
         ensureChannel(ctx);
 
-        Intent open = new Intent(ctx, AlertsActivity.class);
-        open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pi = PendingIntent.getActivity(ctx, id, open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 

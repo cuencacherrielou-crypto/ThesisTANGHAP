@@ -7,7 +7,8 @@ public final class BleUuids {
             UUID.fromString("0000abcd-0000-1000-8000-00805f9b34fb");
     public static final UUID PRESSURE_STREAM_CHAR =
             UUID.fromString("0000ab01-0000-1000-8000-00805f9b34fb");
-    public static final UUID COUGH_EVENT_CHAR =
+    // INMP441 microphone audio (16 kHz PCM) for the on-device cough model
+    public static final UUID AUDIO_STREAM_CHAR =
             UUID.fromString("0000ab02-0000-1000-8000-00805f9b34fb");
     public static final UUID ACTUATION_EVENT_CHAR =
             UUID.fromString("0000ab03-0000-1000-8000-00805f9b34fb");

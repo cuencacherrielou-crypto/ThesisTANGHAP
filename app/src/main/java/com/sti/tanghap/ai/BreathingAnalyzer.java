@@ -1,6 +1,7 @@
 package com.sti.tanghap.ai;
 
 import com.sti.tanghap.ai.processor.SignalProcessor;
+import com.sti.tanghap.domain.RespiratoryNorms;
 
 /**
  * AI-assisted breathing pattern analysis based on pressure sensor fluctuations.
@@ -36,6 +37,11 @@ public class BreathingAnalyzer {
      * @return BreathingResult containing BPM and insights
      */
     public BreathingResult analyze(float[] pressureData, float durationSec) {
+        return analyze(pressureData, durationSec, -1);
+    }
+
+    /** Same as {@link #analyze(float[], float)}, judging the rate against the user's age. */
+    public BreathingResult analyze(float[] pressureData, float durationSec, int ageYears) {
         if (pressureData == null || pressureData.length < 3 || durationSec <= 0) {
             return new BreathingResult(0, "Awaiting Inhalation...", "No pressure data available.", "Normal");
         }
@@ -58,28 +64,40 @@ public class BreathingAnalyzer {
         // 3. Compute BPM over the real elapsed time
         int bpm = Math.round(peaks * 60f / durationSec);
 
-        return classify(bpm);
+        return classify(bpm, ageYears);
     }
 
-    /** Pattern classification for a breathing rate (also used for the session average). */
+    /** Pattern classification for a breathing rate, using adult limits (12-20 BPM). */
     public static BreathingResult classify(int bpm) {
+        return classify(bpm, -1);
+    }
+
+    /**
+     * Pattern classification for a breathing rate (also used for the session average).
+     *
+     * @param ageYears the user's age; negative when unknown (adult limits are used)
+     */
+    public static BreathingResult classify(int bpm, int ageYears) {
         String pattern;
         String insight;
         String severity;
+        String range = RespiratoryNorms.rangeText(ageYears);
 
         if (bpm <= 0) {
             return new BreathingResult(0, "Awaiting Inhalation...", "Inhale through the mouthpiece to measure breathing rate.", "Normal");
-        } else if (bpm > 20) {
+        } else if (RespiratoryNorms.isAboveNormal(bpm, ageYears)) {
             pattern = "Rapid Breathing (Tachypnea-like)";
-            insight = "Preliminary assessment suggests rapid respiratory rhythm. Associated with possible respiratory distress or exertion.";
+            insight = "Breathing is faster than the normal " + range + " range. This can happen with exertion, "
+                    + "and there is a possibility of respiratory distress.";
             severity = "High";
-        } else if (bpm < 12) {
+        } else if (RespiratoryNorms.isBelowNormal(bpm, ageYears)) {
             pattern = "Slow Breathing (Bradypnea-like)";
-            insight = "Possible slow respiratory rate detected. May be associated with deep relaxation or potential respiratory suppression.";
+            insight = "Breathing is slower than the normal " + range + " range. This can happen with deep relaxation, "
+                    + "and there is a possibility of suppressed breathing.";
             severity = "Low";
         } else {
             pattern = "Normal Breathing";
-            insight = "Respiratory rhythm is within the normal range (12-20 bpm).";
+            insight = "Respiratory rhythm is within the normal range (" + range + ").";
             severity = "Normal";
         }
 

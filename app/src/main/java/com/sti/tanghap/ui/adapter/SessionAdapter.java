@@ -17,7 +17,7 @@ import java.util.Locale;
 public class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.ViewHolder> {
     private List<SessionEntity> sessions;
     private final OnSessionClickListener listener;
-    private final SimpleDateFormat sdf = new SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault());
+    private final SimpleDateFormat sdf = new SimpleDateFormat("MMM dd, yyyy hh:mm a", Locale.getDefault());
 
     public interface OnSessionClickListener {
         void onSessionClick(SessionEntity session);

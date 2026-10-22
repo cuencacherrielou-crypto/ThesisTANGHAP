@@ -32,6 +32,10 @@ public class DoseReminderWorker extends Worker {
     @NonNull
     @Override
     public Result doWork() {
+        // Turned off in Settings: skip the database check entirely
+        if (!NotificationHelper.enabledInSettings(getApplicationContext(), NotificationHelper.ID_DOSE)) {
+            return Result.success();
+        }
         DoseReminder.Result r = DoseCheck.checkToday(getApplicationContext());
         if (r.status != DoseReminder.Status.NONE) {
             NotificationHelper.show(getApplicationContext(), NotificationHelper.ID_DOSE, r.title, r.message);

@@ -22,6 +22,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.sti.tanghap.R;
 import com.sti.tanghap.data.HealthPrefs;
+import com.sti.tanghap.domain.AgeCalculator;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -40,6 +41,9 @@ public class OnboardingActivity extends AppCompatActivity {
     private View[] stepIndicators;
 
     private final Map<String, Object> onboardingData = new HashMap<>();
+    /** True when the account has no usable birthday yet (Google sign-up), so step 1 asks for it. */
+    private boolean needsBirthday = false;
+    private String enteredBirthday = "";
     private FirebaseAuth auth;
     private FirebaseFirestore db;
 
@@ -61,6 +65,16 @@ public class OnboardingActivity extends AppCompatActivity {
                 findViewById(R.id.step3),
                 findViewById(R.id.step4)
         };
+
+        // Google sign-up saves no birthday; ask for it so age-based breathing ranges can be used
+        if (auth.getCurrentUser() != null) {
+            db.collection("users").document(auth.getCurrentUser().getUid()).get()
+                    .addOnSuccessListener(doc -> {
+                        needsBirthday = AgeCalculator.fromBirthday(doc.get("birthday"), Calendar.getInstance())
+                                == AgeCalculator.UNKNOWN;
+                        if (viewPager.getAdapter() != null) viewPager.getAdapter().notifyItemChanged(0);
+                    });
+        }
 
         OnboardingAdapter adapter = new OnboardingAdapter();
         viewPager.setAdapter(adapter);
@@ -99,8 +113,18 @@ public class OnboardingActivity extends AppCompatActivity {
         collectData();
         saveToPreferences();
 
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("healthProfile", onboardingData);
+        updates.put("onboardingCompleted", true);
+        int age = AgeCalculator.fromBirthday(enteredBirthday, Calendar.getInstance());
+        if (age != AgeCalculator.UNKNOWN) {
+            updates.put("birthday", enteredBirthday);
+            updates.put("age", String.valueOf(age));
+            HealthPrefs.saveBirthdayAndAge(this, enteredBirthday, String.valueOf(age));
+        }
+
         db.collection("users").document(auth.getCurrentUser().getUid())
-                .update("healthProfile", onboardingData, "onboardingCompleted", true)
+                .update(updates)
                 .addOnSuccessListener(aVoid -> {
                     setLoading(false);
                     startActivity(new Intent(OnboardingActivity.this, DashboardActivity.class));
@@ -171,6 +195,12 @@ public class OnboardingActivity extends AppCompatActivity {
         }
 
         void bind() {
+            if (stepType == 0) {
+                View til = itemView.findViewById(R.id.tilOnboardBirthday);
+                TextInputEditText etBirthday = itemView.findViewById(R.id.etOnboardBirthday);
+                if (til != null) til.setVisibility(needsBirthday ? View.VISIBLE : View.GONE);
+                if (etBirthday != null) etBirthday.setOnClickListener(v -> showDatePicker(etBirthday));
+            }
             if (stepType == 1) {
                 TextInputEditText etDate = itemView.findViewById(R.id.etDiagnosisDate);
                 if (etDate != null) {
@@ -189,6 +219,7 @@ public class OnboardingActivity extends AppCompatActivity {
                 Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
                 calendar.setTimeInMillis(selection);
                 SimpleDateFormat format = new SimpleDateFormat("MM/dd/yyyy", Locale.US);
+                format.setTimeZone(TimeZone.getTimeZone("UTC")); // the picker returns UTC midnight
                 et.setText(format.format(calendar.getTime()));
             });
 
@@ -198,12 +229,14 @@ public class OnboardingActivity extends AppCompatActivity {
         void collectData(Map<String, Object> data) {
             switch (stepType) {
                 case 0:
-                    RadioGroup rgSex = itemView.findViewById(R.id.rgSex);
-                    data.put("biologicalSex", rgSex.getCheckedRadioButtonId() == R.id.rbMale ? "Male" : "Female");
+                    if (needsBirthday) enteredBirthday = getText(R.id.etOnboardBirthday);
+                    // Unanswered questions are left out instead of saved as a default answer
+                    if (isChecked(R.id.rbMale)) data.put("biologicalSex", "Male");
+                    else if (isChecked(R.id.rbFemale)) data.put("biologicalSex", "Female");
                     data.put("heightCm", getText(R.id.etHeight));
                     data.put("weightKg", getText(R.id.etWeight));
-                    data.put("isSmokerOrVaper", isChecked(R.id.rbSmokeYes));
-                    data.put("pollutionExposure", isChecked(R.id.rbPollutionYes));
+                    putYesNo(data, "isSmokerOrVaper", R.id.rbSmokeYes, R.id.rbSmokeNo);
+                    putYesNo(data, "pollutionExposure", R.id.rbPollutionYes, R.id.rbPollutionNo);
                     break;
                 case 1:
                     List<String> conditions = new ArrayList<>();
@@ -217,17 +250,18 @@ public class OnboardingActivity extends AppCompatActivity {
                     if (!others.isEmpty()) conditions.add("Other: " + others);
                     data.put("diagnosedConditions", conditions);
                     data.put("diagnosisDate", getText(R.id.etDiagnosisDate));
-                    data.put("previouslyHospitalized", isChecked(R.id.rbHospYes));
-                    data.put("familyRespiratoryHistory", isChecked(R.id.rbFamilyYes));
+                    putYesNo(data, "previouslyHospitalized", R.id.rbHospYes, R.id.rbHospNo);
+                    putYesNo(data, "familyRespiratoryHistory", R.id.rbFamilyYes, R.id.rbFamilyNo);
                     break;
                 case 2:
                     RadioGroup rgCough = itemView.findViewById(R.id.rgCoughFreq);
                     int coughId = rgCough.getCheckedRadioButtonId();
-                    String freq = "Rarely";
+                    String freq = null;
                     if (coughId == R.id.rbCoughDaily) freq = "Daily";
                     else if (coughId == R.id.rbCoughWeekly) freq = "Weekly";
                     else if (coughId == R.id.rbCoughMonthly) freq = "Monthly";
-                    data.put("coughFrequency", freq);
+                    else if (coughId == R.id.rbCoughRarely) freq = "Rarely";
+                    if (freq != null) data.put("coughFrequency", freq);
 
                     List<String> coughTypes = new ArrayList<>();
                     if (isChecked(R.id.cbDryCough)) coughTypes.add("Dry");
@@ -235,8 +269,8 @@ public class OnboardingActivity extends AppCompatActivity {
                     if (isChecked(R.id.cbPersistentCough)) coughTypes.add("Persistent");
                     if (isChecked(R.id.cbWorseningCough)) coughTypes.add("Worsening");
                     data.put("coughTypes", coughTypes);
-                    data.put("hasShortnessOfBreath", isChecked(R.id.rbShortnessYes));
-                    data.put("hasWheezing", isChecked(R.id.rbWheezingYes));
+                    putYesNo(data, "hasShortnessOfBreath", R.id.rbShortnessYes, R.id.rbShortnessNo);
+                    putYesNo(data, "hasWheezing", R.id.rbWheezingYes, R.id.rbWheezingNo);
 
                     List<String> triggers = new ArrayList<>();
                     if (isChecked(R.id.cbTriggerDust)) triggers.add("Dust");
@@ -252,10 +286,15 @@ public class OnboardingActivity extends AppCompatActivity {
                 case 3:
                     data.put("currentInhalerType", getText(R.id.etInhalerType));
                     data.put("inhalerUsageFreqPerDay", getText(R.id.etInhalerUsageFreq));
-                    data.put("forgetsInhalerUsage", isChecked(R.id.rbForgetYes));
-                    data.put("feelsInhalerRelief", isChecked(R.id.rbReliefYes));
+                    putYesNo(data, "forgetsInhalerUsage", R.id.rbForgetYes, R.id.rbForgetNo);
+                    putYesNo(data, "feelsInhalerRelief", R.id.rbReliefYes, R.id.rbReliefNo);
                     break;
             }
+        }
+
+        private void putYesNo(Map<String, Object> data, String key, int yesId, int noId) {
+            if (isChecked(yesId)) data.put(key, true);
+            else if (isChecked(noId)) data.put(key, false);
         }
 
         private String getText(int id) {

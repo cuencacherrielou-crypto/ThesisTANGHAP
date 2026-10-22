@@ -71,6 +71,10 @@ public class SessionRepository {
                     if (querySnapshots != null && !querySnapshots.isEmpty()) {
                         new Thread(() -> {
                             for (DocumentSnapshot doc : querySnapshots.getDocuments()) {
+                                // Never overwrite a local session whose newer changes (e.g. a cough
+                                // review) are still waiting to upload
+                                SessionEntity local = dao.getByIdForUser(doc.getId(), uid);
+                                if (local != null && !local.synced) continue;
                                 dao.insert(fromDocument(doc, uid));
                             }
                         }).start();
@@ -104,6 +108,12 @@ public class SessionRepository {
         s.baselineComparison = doc.getString("baselineComparison");
         s.recommendation = doc.getString("recommendation");
         s.pressureTrace = doc.getString("pressureTrace");
+        s.pressureTraceTimes = doc.getString("pressureTraceTimes");
+        s.eventLog = SessionEvent.encode(SessionEvent.fromMaps(doc.get("events")));
+        Long dropped = doc.getLong("droppedPackets");
+        s.droppedPackets = dropped != null ? dropped.intValue() : 0;
+        s.possibleCondition = doc.getString("possibleCondition");
+        s.medicineKey = doc.getString("medicineKey");
         s.synced = true;
         return s;
     }
@@ -129,6 +139,13 @@ public class SessionRepository {
         data.put("baselineComparison", s.baselineComparison);
         data.put("recommendation", s.recommendation);
         data.put("pressureTrace", s.pressureTrace);
+
+        // Time stamps and data quality
+        data.put("pressureTraceTimes", s.pressureTraceTimes);
+        data.put("events", SessionEvent.toMaps(SessionEvent.decode(s.eventLog)));
+        data.put("droppedPackets", s.droppedPackets);
+        data.put("possibleCondition", s.possibleCondition);
+        data.put("medicineKey", s.medicineKey);
 
         return data;
     }

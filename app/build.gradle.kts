@@ -15,10 +15,6 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        // Flask cough-model server. Override with -Ptanghap.flaskUrl=http://<pc-ip>:5000/
-        val flaskUrl = (project.findProperty("tanghap.flaskUrl") as String?) ?: "http://192.168.1.5:5000/"
-        buildConfigField("String", "FLASK_BASE_URL", "\"$flaskUrl\"")
     }
 
     buildTypes {
@@ -38,7 +34,6 @@ android {
 
     buildFeatures {
         viewBinding = true
-        buildConfig = true
     }
 }
 
@@ -69,17 +64,14 @@ dependencies {
     // Signal Processing (FFT)
     implementation("com.github.wendykierp:JTransforms:3.1")
 
+    // On-device cough model (TensorFlow Lite runtime, now named LiteRT)
+    implementation("com.google.ai.edge.litert:litert:1.4.2")
+
     // Google Sign-In
     implementation("com.google.android.gms:play-services-auth:21.3.0")
 
-    // Facebook SDK
-    implementation("com.facebook.android:facebook-login:18.2.3")
-
     // Chart
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
-
-    // HTTP Client (Para sa Flask API Audio Upload)
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Testing
     testImplementation(libs.junit)

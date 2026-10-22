@@ -36,6 +36,18 @@ public class SessionEntity {
     // Down-sampled recorded pressure trace (comma-separated kPa values) for the result chart
     public String pressureTrace;
 
+    // ---- v4: time stamps and data quality ----
+    // Milliseconds from startTimeMillis for each pressureTrace point (comma-separated)
+    public String pressureTraceTimes;
+    // Time-stamped coughs, inhaler presses, breathing-rate readings, etc. (SessionEvent.encode)
+    public String eventLog;
+    // Pressure packets lost in Bluetooth transmission during the session
+    public int droppedPackets;
+    // Possible condition (AssessmentEngine.CATEGORY_*); never a diagnosis
+    public String possibleCondition;
+    // Medicine guidance shown for possibleCondition (otcRecommendation holds the same text)
+    public String medicineKey;
+
     public SessionEntity(@NonNull String id) {
         this.id = id;
     }

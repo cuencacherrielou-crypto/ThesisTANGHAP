@@ -10,7 +10,10 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.android.material.button.MaterialButton;
 import com.sti.tanghap.R;
+import com.sti.tanghap.ai.SavedAssessment;
 import com.sti.tanghap.data.ConnectionLog;
+import com.sti.tanghap.data.HealthPrefs;
+import com.sti.tanghap.domain.AgeCalculator;
 import com.sti.tanghap.domain.DoseReminder;
 import com.sti.tanghap.notify.DoseCheck;
 import com.sti.tanghap.data.AppDatabase;
@@ -31,6 +34,7 @@ public class AlertsActivity extends AppCompatActivity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private RecyclerView rvAlerts;
     private MaterialButton btnCallEmergency;
+    private MaterialButton btnNearbyHospitals;
     private FirebaseFirestore db;
     private FirebaseAuth auth;
 
@@ -49,7 +53,14 @@ public class AlertsActivity extends AppCompatActivity {
         rvAlerts = findViewById(R.id.rvAlerts);
         rvAlerts.setLayoutManager(new LinearLayoutManager(this));
         btnCallEmergency = findViewById(R.id.btnCallEmergency);
+        btnNearbyHospitals = findViewById(R.id.btnNearbyHospitals);
+        btnNearbyHospitals.setOnClickListener(v -> NearbyHospitals.open(this));
+    }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Reload so a session saved or reviewed meanwhile is reflected
         loadUserAndAlerts();
     }
 
@@ -64,26 +75,22 @@ public class AlertsActivity extends AppCompatActivity {
 
         db.collection("users").document(auth.getCurrentUser().getUid()).get()
                 .addOnSuccessListener(doc -> {
-                    int age = 25; // Default if not found
-                    if (doc.exists() && doc.get("age") != null) {
-                        try {
-                            String ageStr = String.valueOf(doc.get("age"));
-                            age = Integer.parseInt(ageStr);
-                        } catch (Exception e) {
-                            age = 25;
-                        }
-                    }
-                    final int userAge = age;
-                    loadAlerts(userAge);
+                    // Age from the birthday (stays correct as the user gets older); unknown = adult range
+                    int age = doc.exists()
+                            ? AgeCalculator.resolve(doc.get("birthday"), doc.get("age"), Calendar.getInstance())
+                            : AgeCalculator.UNKNOWN;
+                    loadAlerts(age);
                 })
                 .addOnFailureListener(e -> {
                     Toast.makeText(this, "Failed to load profile for age-based analysis.", Toast.LENGTH_SHORT).show();
-                    loadAlerts(25);
+                    // Offline: use the age cached on this phone
+                    loadAlerts(HealthPrefs.loadProfile(this).ageYears);
                 });
     }
 
     private void loadAlerts(int userAge) {
-        if (auth.getCurrentUser() == null) return;
+        // The profile lookup can answer after this screen closed
+        if (auth.getCurrentUser() == null || executor.isShutdown()) return;
         String uid = auth.getCurrentUser().getUid();
         executor.execute(() -> {
             long now = System.currentTimeMillis();
@@ -124,12 +131,21 @@ public class AlertsActivity extends AppCompatActivity {
 
             List<AlertEngine.Alert> alerts = new ArrayList<>();
 
+            if (com.sti.tanghap.monitor.MonitoringService.activeSession() != null) {
+                alerts.add(new AlertEngine.Alert(
+                        "Monitoring in progress",
+                        "A session is still recording. Its results appear here after you end and save it.",
+                        "INFO"
+                ));
+            }
+
             // Worsening finding from the most recent session
             if (latest != null && latest.riskLevelHigh) {
+                String condition = SavedAssessment.of(latest, null).possibleCondition;
                 alerts.add(new AlertEngine.Alert(
                         "Worsening respiratory pattern",
-                        (latest.otcRecommendation != null ? latest.otcRecommendation + ": " : "")
-                                + "your last session suggests a worsening condition. Contact your emergency contact or visit the nearest hospital if symptoms continue. This is not a diagnosis.",
+                        (condition != null ? condition + ": " : "")
+                                + "your last session suggests a possible worsening condition. Contact your emergency contact or visit the nearest hospital if symptoms continue. This is not a diagnosis.",
                         "WARN"
                 ));
             }
@@ -163,19 +179,24 @@ public class AlertsActivity extends AppCompatActivity {
                 if ("WARN".equals(a.severity)) { hasWarning = true; break; }
             }
             final boolean showEmergency = hasWarning;
+            final boolean showHospitals = latest != null && latest.riskLevelHigh;
 
             if (alerts.isEmpty()) {
-                alerts.add(new AlertEngine.Alert(
-                        "No Alerts",
-                        "Your trends are stable. Continue regular monitoring.",
-                        "INFO"
-                ));
+                alerts.add(latest == null
+                        ? new AlertEngine.Alert("No sessions yet",
+                                "Complete a monitoring session to see alerts about your breathing, coughs and inhaler use.",
+                                "INFO")
+                        : new AlertEngine.Alert("No Alerts",
+                                "Your latest session is within your usual range. Continue regular monitoring.",
+                                "INFO"));
             }
 
             List<AlertEngine.Alert> finalAlerts = alerts;
             runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
                 rvAlerts.setAdapter(new AlertAdapter(finalAlerts));
                 EmergencyContactButton.bind(this, btnCallEmergency, showEmergency);
+                btnNearbyHospitals.setVisibility(showHospitals ? android.view.View.VISIBLE : android.view.View.GONE);
             });
         });
     }

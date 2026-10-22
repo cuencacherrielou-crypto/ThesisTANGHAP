@@ -1,33 +1,37 @@
 package com.sti.tanghap.ai;
 
-import com.sti.tanghap.domain.CoughAnalyzer;
+import com.sti.tanghap.domain.RespiratoryNorms;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Advanced Non-diagnostic AI logic for respiratory assessment.
  * Correlates multiple sensor inputs with user history and symptom patterns.
  * All overloads share one rule set, used by both the live screen and the saved session.
+ * Conditions are only ever named as a "possibility": the app does not diagnose.
  */
 public class AssessmentEngine {
 
-    public static final String CATEGORY_PNEUMONIA = "Pneumonia Symptoms Indication";
-    public static final String CATEGORY_ASTHMA = "Early Detection of Asthma";
-    public static final String CATEGORY_COPD = "COPD Assessment";
-    public static final String CATEGORY_BRONCHITIS = "Bronchitis Pattern Recognition";
-    public static final String CATEGORY_STANDARD = "Standard Respiratory Evaluation";
+    public static final String CATEGORY_PNEUMONIA = "Possibility of a pneumonia-like condition";
+    public static final String CATEGORY_ASTHMA = "Possibility of an asthma-like episode";
+    public static final String CATEGORY_COPD = "Possibility of a COPD flare-up";
+    public static final String CATEGORY_BRONCHITIS = "Possibility of a bronchitis-like condition";
+    public static final String CATEGORY_STANDARD = "No specific condition pattern detected";
 
-    /** Passed as recentCoughCount when the caller does not track cough episodes. */
-    private static final int UNKNOWN_COUGH_COUNT = -1;
+    public static final String NOT_A_DIAGNOSIS =
+            "This is only a possibility based on the sensor readings, not a diagnosis. Only a doctor can confirm a condition.";
 
     public static class AssessmentResult {
         public List<String> possibleFindings = new ArrayList<>();
         public List<String> observations = new ArrayList<>();
         public String insight;
         public String guidance;
-        public String otcCategory;
-        public String medicalDisclaimer = "AI-assisted respiratory monitoring and preliminary assessment only. DOES NOT medically diagnose diseases.";
+        /** One of the CATEGORY_* constants, always worded as a possibility. */
+        public String possibleCondition;
+        /** One of the OtcGuidance keys, already adjusted for the user's age. */
+        public String medicineKey;
+        /** Medicine guidance text that matches {@link #possibleCondition}. */
+        public String medicationGuidance;
         public boolean recommendHospital;
         public boolean recommendClinic;
         public boolean recommendPharmacy;
@@ -36,115 +40,107 @@ public class AssessmentEngine {
         public AssessmentResult() {}
     }
 
-    public AssessmentResult generatePreliminaryAssessment(
-            BreathingAnalyzer.BreathingResult breathing,
-            CoughAnalyzer.CoughType coughType,
-            boolean hasHistoryOfAsthma,
-            boolean hasHistoryOfCOPD,
-            boolean hasMildCongestion) {
-        return generatePreliminaryAssessment(breathing, coughType, null,
-                hasHistoryOfAsthma, hasHistoryOfCOPD, hasMildCongestion);
-    }
-
     /**
-     * @param serverSoundLabel the label returned by the Flask sound classifier
-     *                         (for example "wheezing", "wet_cough"); null when unavailable.
-     */
-    public AssessmentResult generatePreliminaryAssessment(
-            BreathingAnalyzer.BreathingResult breathing,
-            CoughAnalyzer.CoughType coughType,
-            String serverSoundLabel,
-            boolean hasHistoryOfAsthma,
-            boolean hasHistoryOfCOPD,
-            boolean hasMildCongestion) {
-        return generatePreliminaryAssessment(breathing, coughType, serverSoundLabel, UNKNOWN_COUGH_COUNT,
-                hasHistoryOfAsthma, hasHistoryOfCOPD, hasMildCongestion);
-    }
-
-    /**
-     * @param breathing        breathing analysis (bpm 0 = not measured yet)
-     * @param coughType        threshold-based cough type from {@link CoughAnalyzer}
-     * @param coughLabel       label from the trained cough model on the Flask server, may be null
-     * @param recentCoughCount cough episodes in the recent window, or -1 when unknown
+     * @param breathing         breathing analysis (bpm 0 = not measured yet)
+     * @param cough             latest cough / wheeze class from the on-device cough model,
+     *                          null when the model has not heard one yet
      * @param hasMildCongestion background information only; OTC guidance is given for coughs only
      */
     public AssessmentResult generatePreliminaryAssessment(
             BreathingAnalyzer.BreathingResult breathing,
-            CoughAnalyzer.CoughType coughType,
-            String coughLabel,
-            int recentCoughCount,
+            CoughClass cough,
             boolean hasHistoryOfAsthma,
             boolean hasHistoryOfCOPD,
             boolean hasMildCongestion) {
+        return generatePreliminaryAssessment(breathing, cough,
+                new PatientProfile(-1, hasHistoryOfAsthma, hasHistoryOfCOPD, hasMildCongestion));
+    }
 
+    public AssessmentResult generatePreliminaryAssessment(
+            BreathingAnalyzer.BreathingResult breathing,
+            CoughClass cough,
+            PatientProfile profile) {
+
+        if (profile == null) profile = new PatientProfile();
         AssessmentResult result = new AssessmentResult();
-        String label = coughLabel != null ? coughLabel.toLowerCase(Locale.US) : "";
         int bpm = breathing != null ? breathing.bpm : 0;
+        int age = profile.ageYears;
+        String range = RespiratoryNorms.rangeText(age);
 
-        boolean rapidSevere = bpm > 24;
-        boolean rapid = bpm > 20;
-        boolean severeCough = coughType == CoughAnalyzer.CoughType.SEVERE || label.contains("severe");
-        boolean frequentCough = coughType == CoughAnalyzer.CoughType.FREQUENT;
-        boolean persistent = label.contains("persistent");
-        boolean wetCough = coughType == CoughAnalyzer.CoughType.WET || label.contains("wet");
-        boolean dryCough = coughType == CoughAnalyzer.CoughType.DRY || label.contains("dry");
-        result.wheezeDetected = label.contains("wheez");
+        // Breathing-rate limits depend on age (adult limits when the age is unknown)
+        boolean fastBreathing = bpm > 0 && RespiratoryNorms.isFastBreathing(bpm, age);
+        boolean rapid = bpm > 0 && RespiratoryNorms.isAboveNormal(bpm, age);
+        boolean slow = RespiratoryNorms.isBelowNormal(bpm, age);
+        boolean severeCough = cough == CoughClass.SEVERE_COUGH;
+        boolean persistent = cough == CoughClass.PERSISTENT_COUGH;
+        boolean wetCough = cough == CoughClass.WET_COUGH;
+        boolean dryCough = cough == CoughClass.DRY_COUGH;
+        result.wheezeDetected = cough == CoughClass.WHEEZING;
+        String medicine;
 
-        // 1. PNEUMONIA SYMPTOM INDICATION (BPM > 24 or severe/worsening cough)
-        if (rapidSevere || severeCough) {
-            result.possibleFindings.add("Preliminary indicators associated with pneumonia-like respiratory abnormalities.");
-            if (rapidSevere) result.observations.add(rateObservation(bpm, "above 24 BPM (tachypnea)"));
+        // 1. PNEUMONIA-LIKE (fast breathing for the user's age, or severe/worsening cough)
+        if (fastBreathing || severeCough) {
+            result.possibleFindings.add(CATEGORY_PNEUMONIA
+                    + ": the readings show signs that can occur with a lung infection.");
+            if (fastBreathing) result.observations.add(rateObservation(bpm, "fast for your age (normal resting rate " + range + ")"));
             if (severeCough) result.observations.add("Severe or worsening coughing episodes detected.");
-            result.otcCategory = CATEGORY_PNEUMONIA;
+            result.possibleCondition = CATEGORY_PNEUMONIA;
+            medicine = OtcGuidance.SEEK_CARE;
             result.recommendHospital = true; // Shows hospital button for critical state
         }
-        // 2. ASTHMA-LIKE EPISODE (wheezing sound, or asthma history + rapid breathing / frequent cough)
-        else if (result.wheezeDetected || (hasHistoryOfAsthma && (rapid || frequentCough))) {
-            result.possibleFindings.add("Cough patterns potentially associated with an asthma-like respiratory episode.");
+        // 2. ASTHMA-LIKE EPISODE (wheezing sound, or asthma history + rapid breathing / persistent cough)
+        else if (result.wheezeDetected || (profile.hasAsthma && (rapid || persistent))) {
+            result.possibleFindings.add(CATEGORY_ASTHMA
+                    + ": the readings show signs that can occur when the airways narrow.");
             if (result.wheezeDetected) result.observations.add("Sound classifier reported a wheezing-like sound.");
-            if (rapid) result.observations.add(rateObservation(bpm, "above the normal 12-20 BPM range"));
-            if (frequentCough) result.observations.add(coughCountObservation(recentCoughCount));
-            if (hasHistoryOfAsthma) result.observations.add("Profile lists a history of asthma.");
-            result.otcCategory = CATEGORY_ASTHMA;
+            if (rapid) result.observations.add(rateObservation(bpm, "above the normal " + range + " range for your age"));
+            if (persistent) result.observations.add("Sound classifier reported a persistent cough.");
+            if (profile.hasAsthma) result.observations.add("Profile lists a history of asthma.");
+            result.possibleCondition = CATEGORY_ASTHMA;
+            medicine = OtcGuidance.PRESCRIBED_RELIEVER;
             result.recommendHospital = true; // Shows hospital button for emergency response
         }
-        // 3. COPD-RELATED PATTERN (COPD history + frequent/wet/persistent cough or rapid breathing)
-        else if (hasHistoryOfCOPD && (frequentCough || wetCough || persistent || rapid)) {
-            result.possibleFindings.add("Respiratory patterns possibly associated with COPD-related changes.");
+        // 3. COPD FLARE-UP (COPD history + wet/persistent cough or rapid breathing)
+        else if (profile.hasCopd && (wetCough || persistent || rapid)) {
+            result.possibleFindings.add(CATEGORY_COPD
+                    + ": the readings are worse than expected for someone with COPD.");
             if (persistent) result.observations.add("Sound classifier reported a persistent cough.");
-            if (frequentCough) result.observations.add(coughCountObservation(recentCoughCount));
             if (wetCough) result.observations.add("Wet / productive cough pattern detected.");
-            if (rapid) result.observations.add(rateObservation(bpm, "above the normal 12-20 BPM range"));
+            if (rapid) result.observations.add(rateObservation(bpm, "above the normal " + range + " range for your age"));
             result.observations.add("Profile lists a history of COPD.");
-            result.otcCategory = CATEGORY_COPD;
+            result.possibleCondition = CATEGORY_COPD;
+            medicine = OtcGuidance.COPD_ACTION_PLAN;
             result.recommendClinic = true;
             result.recommendHospital = false; // Hospital button stays for pneumonia-like findings only
         }
-        // 4. BRONCHITIS PATTERN RECOGNITION (wet / persistent cough)
+        // 4. BRONCHITIS-LIKE (wet / persistent cough)
         else if (wetCough || persistent) {
-            result.possibleFindings.add("Possible respiratory patterns associated with bronchitis-related observations.");
+            result.possibleFindings.add(CATEGORY_BRONCHITIS
+                    + ": the cough pattern can occur when the airways are irritated or inflamed.");
             result.observations.add(persistent
                     ? "Sound classifier reported a persistent cough."
                     : "Wet / productive cough pattern detected.");
-            if (rapid) result.observations.add(rateObservation(bpm, "above the normal 12-20 BPM range"));
-            result.otcCategory = CATEGORY_BRONCHITIS;
+            if (rapid) result.observations.add(rateObservation(bpm, "above the normal " + range + " range for your age"));
+            result.possibleCondition = CATEGORY_BRONCHITIS;
+            // A persistent cough needs a doctor; only a wet cough gets OTC medicine
+            medicine = persistent ? OtcGuidance.PERSISTENT_COUGH : OtcGuidance.WET_COUGH;
             result.recommendClinic = true;
             result.recommendPharmacy = true;
             result.recommendHospital = false; // Hospital button hidden for mild bronchitis
         }
-        // 5. STANDARD RESPIRATORY EVALUATION
+        // 5. NO SPECIFIC CONDITION PATTERN
         else {
             if (rapid) {
-                result.possibleFindings.add("Breathing rate is slightly elevated; no other abnormal pattern detected.");
-                result.observations.add(rateObservation(bpm, "above the normal 12-20 BPM range"));
+                result.possibleFindings.add("Breathing rate is above the typical range for your age; no specific condition pattern detected.");
+                result.observations.add(rateObservation(bpm, "above the normal " + range + " range for your age"));
                 result.recommendClinic = true;
-            } else if (bpm > 0 && bpm < 12) {
-                result.possibleFindings.add("Breathing rate is below the typical range; no other abnormal pattern detected.");
-                result.observations.add(rateObservation(bpm, "below the normal 12-20 BPM range"));
+            } else if (slow) {
+                result.possibleFindings.add("Breathing rate is below the typical range for your age; no specific condition pattern detected.");
+                result.observations.add(rateObservation(bpm, "below the normal " + range + " range for your age"));
                 result.recommendClinic = true;
             } else {
                 result.possibleFindings.add("Respiratory metrics remain within baseline parameters.");
-                if (bpm > 0) result.observations.add(rateObservation(bpm, "within the normal 12-20 BPM range"));
+                if (bpm > 0) result.observations.add(rateObservation(bpm, "within the normal " + range + " range for your age"));
             }
             if (dryCough) {
                 result.observations.add("Dry / non-productive cough pattern detected.");
@@ -154,14 +150,18 @@ public class AssessmentEngine {
             }
 
             // Allergies are background information only; OTC guidance is given for coughs only.
-            if (dryCough) {
-                result.otcCategory = "Cough Suppressants (for non-productive cough)";
-                result.recommendPharmacy = true;
-            } else {
-                result.otcCategory = CATEGORY_STANDARD;
-            }
+            result.possibleCondition = CATEGORY_STANDARD;
+            medicine = dryCough ? OtcGuidance.DRY_COUGH : OtcGuidance.NO_MEDICINE;
+            result.recommendPharmacy = dryCough;
             result.recommendHospital = false;
         }
+
+        addProfileContext(result, profile);
+
+        // The pharmacy is only suggested when the guidance actually names an OTC medicine
+        result.medicineKey = OtcGuidance.select(medicine, age);
+        if (!OtcGuidance.suggestsMedicine(result.medicineKey)) result.recommendPharmacy = false;
+        result.medicationGuidance = OtcGuidance.describe(result.medicineKey, profile.hasAsthma || profile.hasCopd);
 
         // 6. SUMMARY INSIGHT GENERATION
         if (result.recommendHospital) {
@@ -172,18 +172,28 @@ public class AssessmentEngine {
             result.guidance = "Maintain regular respiratory monitoring, rest, and proper hydration.";
         }
 
-        result.insight = "Assessment Summary: " + String.join(" ", result.possibleFindings)
-                + "\n\nGuidance: " + result.guidance;
+        StringBuilder insight = new StringBuilder("Assessment Summary: ")
+                .append(String.join(" ", result.possibleFindings))
+                .append("\n\nGuidance: ").append(result.guidance);
+        if (!CATEGORY_STANDARD.equals(result.possibleCondition)) {
+            insight.append("\n\n").append(NOT_A_DIAGNOSIS);
+        }
+        result.insight = insight.toString();
         return result;
+    }
+
+    /** Profile answers that make a finding more important to act on. */
+    private static void addProfileContext(AssessmentResult result, PatientProfile profile) {
+        if (!result.recommendHospital && !result.recommendClinic) return;
+        if (profile.smokesOrVapes) {
+            result.observations.add("Profile: smokes or vapes, which can make breathing symptoms worse.");
+        }
+        if (profile.previouslyHospitalized) {
+            result.observations.add("Profile: past hospital stay for breathing problems; do not delay getting checked.");
+        }
     }
 
     private static String rateObservation(int bpm, String qualifier) {
         return "Measured breathing rate of " + bpm + " BPM is " + qualifier + ".";
-    }
-
-    private static String coughCountObservation(int count) {
-        return count >= 0
-                ? "Frequent coughing detected (" + count + " cough episodes in the last minute)."
-                : "Frequent coughing detected.";
     }
 }

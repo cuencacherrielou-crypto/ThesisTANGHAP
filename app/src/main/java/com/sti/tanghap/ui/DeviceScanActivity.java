@@ -157,8 +157,7 @@ public class DeviceScanActivity extends AppCompatActivity implements BleListener
 
     @Override public void onConnected(String deviceName) {}
     @Override public void onDisconnected() {}
-    @Override public void onPressureSamples(float[] kpaSamples) {}
-    @Override public void onCoughEvent(long tsMillis, int intensity) {}
+    @Override public void onPressureSamples(long sequence, float[] kpaSamples) {}
     @Override public void onActuationEvent(long tsMillis) {}
     @Override public void onBattery(Integer percent) {}
     @Override public void onDeviceInfo(String info) {}

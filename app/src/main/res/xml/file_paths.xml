@@ -3,4 +3,8 @@
     <external-files-path
         name="external_files"
         path="." />
+    <!-- Reports saved to Downloads/TANGHAP on Android 8 and 9 -->
+    <external-path
+        name="downloads"
+        path="Download/" />
 </paths>

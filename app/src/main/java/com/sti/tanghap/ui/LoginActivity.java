@@ -18,15 +18,8 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
-import com.facebook.AccessToken;
-import com.facebook.CallbackManager;
-import com.facebook.FacebookCallback;
-import com.facebook.FacebookException;
-import com.facebook.login.LoginManager;
-import com.facebook.login.LoginResult;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
@@ -39,7 +32,6 @@ import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.firebase.auth.AuthCredential;
-import com.google.firebase.auth.FacebookAuthProvider;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException;
 import com.google.firebase.auth.FirebaseAuthInvalidUserException;
@@ -48,7 +40,6 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.sti.tanghap.R;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -56,7 +47,6 @@ public class LoginActivity extends AppCompatActivity {
     private static final String TAG = "LoginActivity";
     private FirebaseAuth auth;
     private FirebaseFirestore db;
-    private CallbackManager callbackManager;
     private GoogleSignInClient googleSignInClient;
     private ActivityResultLauncher<Intent> googleSignInLauncher;
     
@@ -67,6 +57,7 @@ public class LoginActivity extends AppCompatActivity {
     private MaterialCardView termsContainer;
     private View progress;
 
+    private static final long SIGN_IN_TIMEOUT_MS = 30_000;
     private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
     private final Runnable timeoutRunnable = () -> {
         if (progress != null && progress.getVisibility() == View.VISIBLE) {
@@ -94,7 +85,6 @@ public class LoginActivity extends AppCompatActivity {
 
         setupGoogleSignIn();
         setupTermsLink();
-        setupFacebookSignIn();
 
         findViewById(R.id.btnLogin).setOnClickListener(v -> login());
         findViewById(R.id.btnGoRegister).setOnClickListener(v ->
@@ -103,7 +93,6 @@ public class LoginActivity extends AppCompatActivity {
                 startActivity(new Intent(this, ForgotPasswordActivity.class)));
         
         findViewById(R.id.btnGoogle).setOnClickListener(v -> signInWithGoogle());
-        findViewById(R.id.btnFacebook).setOnClickListener(v -> signInWithFacebook());
 
         cbTerms.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (isChecked) {
@@ -170,28 +159,7 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     private void showTermsDialog() {
-        new AlertDialog.Builder(this)
-                .setTitle("Terms and Privacy Policy")
-                .setMessage("TANGHAP respects your privacy. All sensor data is stored securely and used only for providing trend analytics. We do not provide medical diagnosis. By using this app, you agree to our data processing practices.")
-                .setPositiveButton("I Understand", null)
-                .show();
-    }
-
-    private void setupFacebookSignIn() {
-        callbackManager = CallbackManager.Factory.create();
-        LoginManager.getInstance().registerCallback(callbackManager, new FacebookCallback<LoginResult>() {
-            @Override
-            public void onSuccess(LoginResult loginResult) { handleFacebookToken(loginResult.getAccessToken()); }
-            @Override
-            public void onCancel() { setLoading(false); }
-            @Override
-            public void onError(@NonNull FacebookException error) {
-                setLoading(false);
-                // Shows Meta's reason, e.g. invalid key hash, app not live, or invalid scopes
-                Log.e(TAG, "Facebook Login error", error);
-                Toast.makeText(LoginActivity.this, "Facebook Error: " + error.getMessage(), Toast.LENGTH_LONG).show();
-            }
-        });
+        PrivacyPolicy.showDialog(this);
     }
 
     private boolean checkTerms() {
@@ -225,15 +193,6 @@ public class LoginActivity extends AppCompatActivity {
         });
     }
 
-    private void signInWithFacebook() {
-        if (!checkTerms()) return;
-        setLoading(true);
-        // Drop any cached Facebook session so the user can pick the account
-        LoginManager.getInstance().logOut();
-        // Activity Result API overload: the result goes straight to callbackManager
-        LoginManager.getInstance().logInWithReadPermissions(this, callbackManager, Arrays.asList("email", "public_profile"));
-    }
-
     private void firebaseAuthWithSocial(AuthCredential credential) {
         auth.signInWithCredential(credential).addOnCompleteListener(this, task -> {
             timeoutHandler.removeCallbacks(timeoutRunnable);
@@ -256,7 +215,6 @@ public class LoginActivity extends AppCompatActivity {
                     msg = "Auth Error: " + (task.getException() != null
                             ? task.getException().getMessage() : "Authentication Failed.");
                 }
-                LoginManager.getInstance().logOut();
                 Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
             }
         });
@@ -304,11 +262,6 @@ public class LoginActivity extends AppCompatActivity {
         finish();
     }
 
-    private void handleFacebookToken(AccessToken token) {
-        setLoading(true);
-        firebaseAuthWithSocial(FacebookAuthProvider.getCredential(token.getToken()));
-    }
-
     private void login() {
         if (!checkTerms()) return;
 
@@ -348,9 +301,11 @@ public class LoginActivity extends AppCompatActivity {
 
     private void setLoading(boolean loading) {
         if (progress != null) progress.setVisibility(loading ? View.VISIBLE : View.GONE);
+        // Stop the spinner with a message if the sign-in request never answers
+        timeoutHandler.removeCallbacks(timeoutRunnable);
+        if (loading) timeoutHandler.postDelayed(timeoutRunnable, SIGN_IN_TIMEOUT_MS);
         findViewById(R.id.btnLogin).setEnabled(!loading);
         findViewById(R.id.btnGoogle).setEnabled(!loading);
-        findViewById(R.id.btnFacebook).setEnabled(!loading);
     }
 
     private String safe(TextInputEditText et) {

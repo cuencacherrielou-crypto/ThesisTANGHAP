@@ -23,6 +23,10 @@ public class ChangePasswordActivity extends AppCompatActivity {
         setContentView(R.layout.activity_change_password);
 
         user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null) {
+            finish();
+            return;
+        }
 
         etCurrent = findViewById(R.id.etCurrentPassword);
         etNew = findViewById(R.id.etNewPassword);
@@ -33,10 +37,23 @@ public class ChangePasswordActivity extends AppCompatActivity {
         findViewById(R.id.btnUpdatePassword).setOnClickListener(v -> updatePassword());
     }
 
+    /** True when the account can sign in with an email and password (not Google only). */
+    private boolean hasPasswordSignIn() {
+        for (com.google.firebase.auth.UserInfo info : user.getProviderData()) {
+            if (EmailAuthProvider.PROVIDER_ID.equals(info.getProviderId())) return true;
+        }
+        return false;
+    }
+
     private void updatePassword() {
-        String currentPass = etCurrent.getText().toString().trim();
-        String newPass = etNew.getText().toString().trim();
-        String confirmPass = etConfirm.getText().toString().trim();
+        if (!hasPasswordSignIn() || user.getEmail() == null) {
+            Toast.makeText(this, "This account signs in with Google, so it has no TANGHAP password. "
+                    + "Manage your password in your Google account.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        String currentPass = text(etCurrent);
+        String newPass = text(etNew);
+        String confirmPass = text(etConfirm);
 
         if (currentPass.isEmpty() || newPass.isEmpty() || confirmPass.isEmpty()) {
             Toast.makeText(this, "All fields are required.", Toast.LENGTH_SHORT).show();
@@ -66,7 +83,8 @@ public class ChangePasswordActivity extends AppCompatActivity {
                         Toast.makeText(this, "Password updated successfully!", Toast.LENGTH_SHORT).show();
                         finish();
                     } else {
-                        Toast.makeText(this, "Update failed: " + updateTask.getException().getMessage(), Toast.LENGTH_LONG).show();
+                        String reason = updateTask.getException() != null ? updateTask.getException().getMessage() : "unknown error";
+                        Toast.makeText(this, "Update failed: " + reason, Toast.LENGTH_LONG).show();
                     }
                 });
             } else {
@@ -74,6 +92,10 @@ public class ChangePasswordActivity extends AppCompatActivity {
                 Toast.makeText(this, "Current password incorrect.", Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    private static String text(TextInputEditText et) {
+        return et.getText() == null ? "" : et.getText().toString().trim();
     }
 
     private void setLoading(boolean loading) {

@@ -150,8 +150,48 @@
                 app:strokeWidth="1dp"
                 app:strokeColor="@color/divider">
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
-                    <TextView android:text="Recorded Pressure Trace" android:textColor="@color/text_low_emphasis" android:textStyle="bold" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
-                    <com.github.mikephil.charting.charts.LineChart android:id="@+id/chartResultPattern" android:layout_width="match_parent" android:layout_height="120dp" android:layout_marginTop="8dp"/>
+                    <TextView android:text="Recorded Pressure Trace (seconds into session)" android:textColor="@color/text_low_emphasis" android:textStyle="bold" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                    <com.github.mikephil.charting.charts.LineChart android:id="@+id/chartResultPattern" android:layout_width="match_parent" android:layout_height="140dp" android:layout_marginTop="8dp"/>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Time-stamped Session Timeline -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:cardBackgroundColor="@color/surface_card"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/divider">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+                    <TextView android:text="Session Timeline" android:textColor="@color/accent_teal" android:textStyle="bold" android:textSize="12sp" android:textAllCaps="true" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                    <TextView
+                        android:id="@+id/tvTimelineSummary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:textColor="@color/text_high_emphasis"
+                        android:textSize="13sp"/>
+                    <TextView android:id="@+id/tvBpmTimelineLabel" android:text="Breathing Rate Over Time (BPM)" android:textColor="@color/text_low_emphasis" android:textStyle="bold" android:textSize="11sp" android:layout_marginTop="12dp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                    <com.github.mikephil.charting.charts.LineChart android:id="@+id/chartBpmTimeline" android:layout_width="match_parent" android:layout_height="120dp" android:layout_marginTop="8dp"/>
+                    <TextView
+                        android:id="@+id/tvCoughReviewHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="Was a cough from someone near you? Tap Not mine to remove it, or Count it to add back a cough that was left out. The results update automatically."
+                        android:textColor="@color/text_low_emphasis"
+                        android:textSize="11sp"
+                        android:visibility="gone"/>
+                    <!-- One row per key event; cough rows get a Not mine / Count it button -->
+                    <LinearLayout
+                        android:id="@+id/timelineContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="vertical"/>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

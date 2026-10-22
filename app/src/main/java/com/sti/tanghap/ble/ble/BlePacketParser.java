@@ -8,10 +8,6 @@ public final class BlePacketParser {
         public long sequence;
         public List<Float> kpaSamples;
     }
-    public static class CoughEvent {
-        public long unixMillis;
-        public int intensity; // 0-255
-    }
     public static class ActuationEvent {
         public long unixMillis;
     }
@@ -38,19 +34,6 @@ public final class BlePacketParser {
         pkt.sequence = seq;
         pkt.kpaSamples = samples;
         return pkt;
-    }
-    // Cough packet:
-    // uint64 unixMillis
-    // uint8 intensity
-    public static CoughEvent parseCough(byte[] bytes) {
-        if (bytes == null || bytes.length < 9) return null;
-        ByteBuffer bb = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
-        long ts = bb.getLong();
-        int intensity = Byte.toUnsignedInt(bb.get());
-        CoughEvent ev = new CoughEvent();
-        ev.unixMillis = ts;
-        ev.intensity = intensity;
-        return ev;
     }
     // Actuation packet:
     // uint64 unixMillis

@@ -6,7 +6,7 @@ import static org.junit.Assert.assertTrue;
 
 import com.sti.tanghap.ai.AssessmentEngine;
 import com.sti.tanghap.ai.BreathingAnalyzer;
-import com.sti.tanghap.domain.CoughAnalyzer;
+import com.sti.tanghap.ai.CoughClass;
 import com.sti.tanghap.domain.DoseReminder;
 import com.sti.tanghap.domain.InhalationTracker;
 
@@ -21,27 +21,27 @@ public class PanelRevisionLogicTest {
     // ---------- Wheezing ----------
 
     @Test
-    public void wheezeLabelFromServer_triggersAsthmaFinding() {
+    public void wheezeFromModel_triggersAsthmaFinding() {
         AssessmentEngine.AssessmentResult r = new AssessmentEngine().generatePreliminaryAssessment(
-                bpm(16), CoughAnalyzer.CoughType.NORMAL, "Wheezing Detected", false, false, false);
+                bpm(16), CoughClass.WHEEZING, false, false, false);
         assertTrue(r.wheezeDetected);
-        assertEquals("Early Detection of Asthma", r.otcCategory);
+        assertEquals(AssessmentEngine.CATEGORY_ASTHMA, r.possibleCondition);
         assertTrue(r.recommendHospital);
     }
 
     @Test
-    public void noServerLabel_keepsOldBehaviour() {
+    public void noModelPrediction_isStandard() {
         AssessmentEngine.AssessmentResult r = new AssessmentEngine().generatePreliminaryAssessment(
-                bpm(16), CoughAnalyzer.CoughType.NORMAL, false, false, false);
+                bpm(16), null, false, false, false);
         assertFalse(r.wheezeDetected);
-        assertEquals("Standard Respiratory Evaluation", r.otcCategory);
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.possibleCondition);
     }
 
     @Test
-    public void persistentLabel_withCopdHistory_givesCopdFinding() {
+    public void persistentCough_withCopdHistory_givesCopdFinding() {
         AssessmentEngine.AssessmentResult r = new AssessmentEngine().generatePreliminaryAssessment(
-                bpm(16), CoughAnalyzer.CoughType.DRY, "Cough Detected: Persistent cough", false, true, false);
-        assertEquals("COPD Assessment", r.otcCategory);
+                bpm(16), CoughClass.PERSISTENT_COUGH, false, true, false);
+        assertEquals(AssessmentEngine.CATEGORY_COPD, r.possibleCondition);
     }
 
     // ---------- Inhalation duration ----------

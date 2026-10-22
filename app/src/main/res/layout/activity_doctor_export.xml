@@ -64,6 +64,14 @@
                 android:text="PDF Medical Export (.pdf)"
                 android:textColor="@color/text_high_emphasis"
                 android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Saved to: Downloads › TANGHAP on this phone"
+                android:textColor="@color/text_medium_emphasis"
+                android:textSize="13sp" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
