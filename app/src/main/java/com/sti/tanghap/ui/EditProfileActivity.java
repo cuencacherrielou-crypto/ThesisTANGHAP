@@ -13,8 +13,10 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.sti.tanghap.R;
 import com.sti.tanghap.data.ProfilePrefs;
+import com.sti.tanghap.domain.AgeCalculator;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -143,8 +145,10 @@ public class EditProfileActivity extends AppCompatActivity {
     private void saveProfile() {
         String name = safe(etFullName);
         String username = safe(etUsername);
-        String age = safe(etAge);
         String birthday = safe(etBirthday);
+        // A valid birthday decides the age, so the two never disagree
+        int ageFromBirthday = AgeCalculator.fromBirthday(birthday, Calendar.getInstance());
+        String age = ageFromBirthday != AgeCalculator.UNKNOWN ? String.valueOf(ageFromBirthday) : safe(etAge);
 
         if (name.isEmpty() || username.isEmpty()) {
             Toast.makeText(this, "Name and Username are required.", Toast.LENGTH_SHORT).show();
@@ -207,6 +211,7 @@ public class EditProfileActivity extends AppCompatActivity {
         mergedHealth.put("medications", medications);
         mergedHealth.put("allergyDetails", allergyDetails);
         HealthPrefs.saveFromHealthMap(this, mergedHealth);
+        HealthPrefs.saveBirthdayAndAge(this, birthday, age);
         ProfilePrefs.prefs(this).edit()
                 .putInt(ProfilePrefs.KEY_PRESCRIBED_DOSES, prescribedDoses)
                 .putString(ProfilePrefs.KEY_MEDICATIONS, medications)

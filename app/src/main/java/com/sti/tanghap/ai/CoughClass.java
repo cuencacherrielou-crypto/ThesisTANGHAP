@@ -22,10 +22,18 @@ public enum CoughClass {
         this.isCough = isCough;
     }
 
+    /** The class with this display label (as saved in the event log), or null. */
+    public static CoughClass fromLabel(String label) {
+        for (CoughClass c : values()) {
+            if (c.label.equals(label)) return c;
+        }
+        return null;
+    }
+
     /** Text for the live AI findings card, e.g. "Cough Detected: Wet cough (87%)". */
     public String displayText(int confidencePercent) {
         String suffix = " (" + confidencePercent + "%)";
-        if (this == WHEEZING) return "Wheezing Detected" + suffix;
+        if (this == WHEEZING) return "Wheezing-like Sound Detected" + suffix;
         if (isCough) return "Cough Detected: " + label + suffix;
         return label + suffix;
     }

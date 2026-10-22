@@ -78,9 +78,12 @@ public class SettingsActivity extends AppCompatActivity {
         });
 
         findViewById(R.id.btnLogout).setOnClickListener(v -> {
+            // A session still running is saved for this account before signing out
+            if (com.sti.tanghap.monitor.MonitoringService.activeSession() != null) {
+                com.sti.tanghap.monitor.MonitoringService.activeSession().endAndSave();
+            }
             FirebaseAuth.getInstance().signOut();
             HealthPrefs.clearUserData(this);
-            com.facebook.login.LoginManager.getInstance().logOut();
             Intent login = new Intent(this, LoginActivity.class);
             login.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             startActivity(login);

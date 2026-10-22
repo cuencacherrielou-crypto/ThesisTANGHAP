@@ -27,22 +27,11 @@ public class AlertEngine {
     ) {
         List<Alert> out = new ArrayList<>();
 
-        // Age-based Breathing Pattern Analysis
+        // Age-based Breathing Pattern Analysis (unknown age = adult range)
         if (todayBpm > 0) {
-            int minBpm, maxBpm;
-            if (userAge < 1) {
-                minBpm = 30; maxBpm = 60;
-            } else if (userAge <= 3) {
-                minBpm = 24; maxBpm = 40;
-            } else if (userAge <= 6) {
-                minBpm = 22; maxBpm = 34;
-            } else if (userAge <= 12) {
-                minBpm = 18; maxBpm = 30;
-            } else if (userAge <= 18) {
-                minBpm = 12; maxBpm = 16;
-            } else {
-                minBpm = 12; maxBpm = 20;
-            }
+            int[] range = RespiratoryNorms.normalRange(userAge);
+            int minBpm = range[0];
+            int maxBpm = range[1];
 
             if (todayBpm < minBpm || todayBpm > maxBpm) {
                 String status = todayBpm < minBpm ? "lower" : "higher";
@@ -71,7 +60,8 @@ public class AlertEngine {
             ));
         }
 
-        if (baseline.avgInhaleDurationMillis > 0 && todayInhaleDurationMillis < baseline.avgInhaleDurationMillis * 0.7f) {
+        if (baseline.avgInhaleDurationMillis > 0 && todayInhaleDurationMillis > 0
+                && todayInhaleDurationMillis < baseline.avgInhaleDurationMillis * 0.7f) {
             out.add(new Alert(
                     "Shorter inhalation duration",
                     "Inhalation duration appears lower than usual. This may indicate technique variation. This is a trend indicator only.",
@@ -79,8 +69,9 @@ public class AlertEngine {
             ));
         }
 
-        // Optional pressure deviation info
-        if (baseline.avgPeakPressure > 0 && todayPeakPressure < baseline.avgPeakPressure * 0.7f) {
+        // Optional pressure deviation info (0 = no pressure recorded, not a weak inhalation)
+        if (baseline.avgPeakPressure > 0 && todayPeakPressure > 0
+                && todayPeakPressure < baseline.avgPeakPressure * 0.7f) {
             out.add(new Alert(
                     "Lower peak pressure than baseline",
                     "Peak inhalation pressure is below your baseline. Consider checking inhaler technique. Trend indicator only.",

@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase;
 import androidx.room.migration.Migration;
 import androidx.sqlite.db.SupportSQLiteDatabase;
 
-@Database(entities = {SessionEntity.class}, version = 3)
+@Database(entities = {SessionEntity.class}, version = 4)
 public abstract class AppDatabase extends RoomDatabase {
     private static volatile AppDatabase INSTANCE;
     public abstract SessionDao sessionDao();
@@ -20,6 +20,18 @@ public abstract class AppDatabase extends RoomDatabase {
         }
     };
 
+    // v4 adds time stamps (event log, trace times), lost-packet count and the possible condition.
+    static final Migration MIGRATION_3_4 = new Migration(3, 4) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase db) {
+            db.execSQL("ALTER TABLE sessions ADD COLUMN pressureTraceTimes TEXT");
+            db.execSQL("ALTER TABLE sessions ADD COLUMN eventLog TEXT");
+            db.execSQL("ALTER TABLE sessions ADD COLUMN droppedPackets INTEGER NOT NULL DEFAULT 0");
+            db.execSQL("ALTER TABLE sessions ADD COLUMN possibleCondition TEXT");
+            db.execSQL("ALTER TABLE sessions ADD COLUMN medicineKey TEXT");
+        }
+    };
+
     public static AppDatabase getInstance(Context ctx) {
         if (INSTANCE == null) {
             synchronized (AppDatabase.class) {
@@ -29,7 +41,7 @@ public abstract class AppDatabase extends RoomDatabase {
                                     AppDatabase.class,
                                     "tanghap.db"
                     )
-                    .addMigrations(MIGRATION_2_3)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                     // Only used for versions without a migration path (e.g. old v1 dev builds)
                     .fallbackToDestructiveMigration()
                     .build();

@@ -22,6 +22,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.sti.tanghap.R;
 import com.sti.tanghap.data.HealthPrefs;
+import com.sti.tanghap.domain.AgeCalculator;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -40,6 +41,9 @@ public class OnboardingActivity extends AppCompatActivity {
     private View[] stepIndicators;
 
     private final Map<String, Object> onboardingData = new HashMap<>();
+    /** True when the account has no usable birthday yet (Google sign-up), so step 1 asks for it. */
+    private boolean needsBirthday = false;
+    private String enteredBirthday = "";
     private FirebaseAuth auth;
     private FirebaseFirestore db;
 
@@ -61,6 +65,16 @@ public class OnboardingActivity extends AppCompatActivity {
                 findViewById(R.id.step3),
                 findViewById(R.id.step4)
         };
+
+        // Google sign-up saves no birthday; ask for it so age-based breathing ranges can be used
+        if (auth.getCurrentUser() != null) {
+            db.collection("users").document(auth.getCurrentUser().getUid()).get()
+                    .addOnSuccessListener(doc -> {
+                        needsBirthday = AgeCalculator.fromBirthday(doc.get("birthday"), Calendar.getInstance())
+                                == AgeCalculator.UNKNOWN;
+                        if (viewPager.getAdapter() != null) viewPager.getAdapter().notifyItemChanged(0);
+                    });
+        }
 
         OnboardingAdapter adapter = new OnboardingAdapter();
         viewPager.setAdapter(adapter);
@@ -99,8 +113,18 @@ public class OnboardingActivity extends AppCompatActivity {
         collectData();
         saveToPreferences();
 
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("healthProfile", onboardingData);
+        updates.put("onboardingCompleted", true);
+        int age = AgeCalculator.fromBirthday(enteredBirthday, Calendar.getInstance());
+        if (age != AgeCalculator.UNKNOWN) {
+            updates.put("birthday", enteredBirthday);
+            updates.put("age", String.valueOf(age));
+            HealthPrefs.saveBirthdayAndAge(this, enteredBirthday, String.valueOf(age));
+        }
+
         db.collection("users").document(auth.getCurrentUser().getUid())
-                .update("healthProfile", onboardingData, "onboardingCompleted", true)
+                .update(updates)
                 .addOnSuccessListener(aVoid -> {
                     setLoading(false);
                     startActivity(new Intent(OnboardingActivity.this, DashboardActivity.class));
@@ -171,6 +195,12 @@ public class OnboardingActivity extends AppCompatActivity {
         }
 
         void bind() {
+            if (stepType == 0) {
+                View til = itemView.findViewById(R.id.tilOnboardBirthday);
+                TextInputEditText etBirthday = itemView.findViewById(R.id.etOnboardBirthday);
+                if (til != null) til.setVisibility(needsBirthday ? View.VISIBLE : View.GONE);
+                if (etBirthday != null) etBirthday.setOnClickListener(v -> showDatePicker(etBirthday));
+            }
             if (stepType == 1) {
                 TextInputEditText etDate = itemView.findViewById(R.id.etDiagnosisDate);
                 if (etDate != null) {
@@ -189,6 +219,7 @@ public class OnboardingActivity extends AppCompatActivity {
                 Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
                 calendar.setTimeInMillis(selection);
                 SimpleDateFormat format = new SimpleDateFormat("MM/dd/yyyy", Locale.US);
+                format.setTimeZone(TimeZone.getTimeZone("UTC")); // the picker returns UTC midnight
                 et.setText(format.format(calendar.getTime()));
             });
 
@@ -198,6 +229,7 @@ public class OnboardingActivity extends AppCompatActivity {
         void collectData(Map<String, Object> data) {
             switch (stepType) {
                 case 0:
+                    if (needsBirthday) enteredBirthday = getText(R.id.etOnboardBirthday);
                     // Unanswered questions are left out instead of saved as a default answer
                     if (isChecked(R.id.rbMale)) data.put("biologicalSex", "Male");
                     else if (isChecked(R.id.rbFemale)) data.put("biologicalSex", "Female");

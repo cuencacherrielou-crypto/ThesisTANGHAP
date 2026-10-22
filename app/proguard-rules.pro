@@ -4,6 +4,3 @@
 
 # Firebase Auth
 -keep class com.google.firebase.auth.** { *; }
-
-# Facebook
--keep class com.facebook.** { *; }

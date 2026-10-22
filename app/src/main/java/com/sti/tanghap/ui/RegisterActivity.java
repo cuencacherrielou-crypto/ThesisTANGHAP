@@ -35,6 +35,7 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.sti.tanghap.R;
+import com.sti.tanghap.domain.AgeCalculator;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -55,6 +56,7 @@ public class RegisterActivity extends AppCompatActivity {
     private MaterialCardView termsContainer;
     private View progress;
 
+    private static final long SIGN_IN_TIMEOUT_MS = 30_000;
     private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
     private final Runnable timeoutRunnable = () -> {
         if (progress != null && progress.getVisibility() == View.VISIBLE) {
@@ -159,14 +161,19 @@ public class RegisterActivity extends AppCompatActivity {
             Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
             calendar.setTimeInMillis(selection);
             SimpleDateFormat format = new SimpleDateFormat("MM/dd/yyyy", Locale.US);
+            format.setTimeZone(TimeZone.getTimeZone("UTC")); // the picker returns UTC midnight
             bdayEt.setText(format.format(calendar.getTime()));
 
-            Calendar today = Calendar.getInstance();
-            int age = today.get(Calendar.YEAR) - calendar.get(Calendar.YEAR);
-            if (today.get(Calendar.DAY_OF_YEAR) < calendar.get(Calendar.DAY_OF_YEAR)) {
-                age--;
+            // Same age rule as the rest of the app (birthday not reached yet this year = one less)
+            int age = AgeCalculator.fromBirthday(bdayEt.getText() != null ? bdayEt.getText().toString() : null,
+                    Calendar.getInstance());
+            if (age == AgeCalculator.UNKNOWN) {
+                bdayEt.setText("");
+                ageEt.setText("");
+                Toast.makeText(this, "Please choose a birthday that is not in the future.", Toast.LENGTH_SHORT).show();
+            } else {
+                ageEt.setText(String.valueOf(age));
             }
-            ageEt.setText(String.valueOf(Math.max(0, age)));
         });
 
         datePicker.show(getSupportFragmentManager(), "DATE_PICKER");
@@ -294,6 +301,9 @@ public class RegisterActivity extends AppCompatActivity {
 
     private void setLoading(boolean loading) {
         if (progress != null) progress.setVisibility(loading ? View.VISIBLE : View.GONE);
+        // Stop the spinner with a message if the sign-in request never answers
+        timeoutHandler.removeCallbacks(timeoutRunnable);
+        if (loading) timeoutHandler.postDelayed(timeoutRunnable, SIGN_IN_TIMEOUT_MS);
         findViewById(R.id.btnRegister).setEnabled(!loading);
         findViewById(R.id.btnGoogleRegister).setEnabled(!loading);
     }

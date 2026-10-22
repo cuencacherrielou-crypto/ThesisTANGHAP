@@ -23,9 +23,23 @@
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
         android:layout_marginTop="12dp"
-        android:text="Call Emergency Contact"
+        android:text="Emergency Call (911)"
         android:backgroundTint="@color/error"
         android:textColor="@android:color/white"
+        android:visibility="gone"/>
+
+    <!-- Shown when the latest session suggested hospital care -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnNearbyHospitals"
+        style="@style/Widget.Material3.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="4dp"
+        android:text="Find Nearby Hospitals"
+        android:textColor="@color/accent_teal"
+        app:strokeColor="@color/accent_teal"
         android:visibility="gone"/>
 
     <androidx.recyclerview.widget.RecyclerView

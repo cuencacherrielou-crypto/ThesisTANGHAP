@@ -19,6 +19,10 @@ public interface SessionDao {
     @Query("SELECT * FROM sessions WHERE userId = :userId AND startTimeMillis >= :sinceMillis ORDER BY startTimeMillis ASC")
     List<SessionEntity> getSinceForUser(String userId, long sinceMillis);
 
+    /** Sessions that were still running at or after the given time (for "today" counts across midnight). */
+    @Query("SELECT * FROM sessions WHERE userId = :userId AND endTimeMillis >= :sinceMillis ORDER BY startTimeMillis ASC")
+    List<SessionEntity> getEndedSinceForUser(String userId, long sinceMillis);
+
     @Query("SELECT * FROM sessions WHERE userId = :userId AND synced = 0 ORDER BY startTimeMillis ASC")
     List<SessionEntity> getUnsyncedForUser(String userId);
 

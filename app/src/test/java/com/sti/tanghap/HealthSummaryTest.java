@@ -16,6 +16,10 @@ import java.util.Map;
 
 public class HealthSummaryTest {
 
+    /** Fixed "today" so the age check does not change with the real date. */
+    private static final java.util.Calendar TODAY = new java.util.GregorianCalendar(2026, java.util.Calendar.OCTOBER, 22);
+
+
     private static Map<String, Object> userDoc(Map<String, Object> health) {
         Map<String, Object> doc = new HashMap<>();
         doc.put("fullName", "Juan Dela Cruz");
@@ -68,7 +72,7 @@ public class HealthSummaryTest {
         contact.put("phone", "09171234567");
         doc.put("emergencyContact", contact);
 
-        List<HealthSummary.Section> s = HealthSummary.build(doc);
+        List<HealthSummary.Section> s = HealthSummary.build(doc, TODAY);
 
         assertEquals(6, s.size());
         assertEquals("Juan Dela Cruz", value(s, "Full name"));
@@ -123,7 +127,7 @@ public class HealthSummaryTest {
         doc.put("age", "N/A");
         doc.put("birthday", "null");
 
-        List<HealthSummary.Section> s = HealthSummary.build(doc);
+        List<HealthSummary.Section> s = HealthSummary.build(doc, TODAY);
 
         assertEquals(1, s.size());
         assertEquals("Personal Details", s.get(0).title);

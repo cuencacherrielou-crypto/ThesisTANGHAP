@@ -6,6 +6,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.sti.tanghap.data.AppDatabase;
 import com.sti.tanghap.data.ProfilePrefs;
 import com.sti.tanghap.data.SessionEntity;
+import com.sti.tanghap.data.SessionEvent;
 import com.sti.tanghap.domain.DoseReminder;
 
 import java.util.Calendar;
@@ -33,10 +34,29 @@ public final class DoseCheck {
         cal.set(Calendar.SECOND, 0);
         cal.set(Calendar.MILLISECOND, 0);
 
-        List<SessionEntity> today = AppDatabase.getInstance(ctx).sessionDao()
-                .getSinceForUser(uid, cal.getTimeInMillis());
+        long midnight = cal.getTimeInMillis();
+        List<SessionEntity> sessions = AppDatabase.getInstance(ctx).sessionDao()
+                .getEndedSinceForUser(uid, midnight);
         int total = 0;
-        for (SessionEntity s : today) total += s.actuationCount;
+        for (SessionEntity s : sessions) total += actuationsSince(s, midnight);
         return total;
+    }
+
+    /**
+     * Inhaler presses in this session at or after the given time. Uses the time-stamped
+     * presses when the session has them, so a session that runs past midnight is split
+     * correctly; older sessions without time stamps count only if they started today.
+     */
+    public static int actuationsSince(SessionEntity s, long sinceMillis) {
+        List<SessionEvent> events = SessionEvent.decode(s.eventLog);
+        boolean hasStamps = false;
+        int count = 0;
+        for (SessionEvent e : events) {
+            if (e.type != SessionEvent.Type.ACTUATION) continue;
+            hasStamps = true;
+            if (e.timeMillis >= sinceMillis) count++;
+        }
+        if (hasStamps) return count;
+        return s.startTimeMillis >= sinceMillis ? s.actuationCount : 0;
     }
 }

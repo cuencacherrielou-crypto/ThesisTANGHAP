@@ -1,6 +1,7 @@
 package com.sti.tanghap.domain;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -37,8 +38,13 @@ public final class HealthSummary {
 
     private HealthSummary() {}
 
-    @SuppressWarnings("unchecked")
     public static List<Section> build(Map<String, Object> userDoc) {
+        return build(userDoc, Calendar.getInstance());
+    }
+
+    /** @param today used to work out the current age from the birthday */
+    @SuppressWarnings("unchecked")
+    public static List<Section> build(Map<String, Object> userDoc, Calendar today) {
         List<Section> sections = new ArrayList<>();
         if (userDoc == null) return sections;
 
@@ -47,7 +53,9 @@ public final class HealthSummary {
 
         List<Item> personal = new ArrayList<>();
         addText(personal, "Full name", userDoc.get("fullName"));
-        addText(personal, "Age", userDoc.get("age"));
+        // Current age from the birthday, so it stays correct after each birthday
+        int age = AgeCalculator.resolve(userDoc.get("birthday"), userDoc.get("age"), today);
+        if (age != AgeCalculator.UNKNOWN) personal.add(new Item("Age", String.valueOf(age)));
         addText(personal, "Birthday", userDoc.get("birthday"));
         addText(personal, "Biological sex", h.get("biologicalSex"));
         Double height = number(h.get("heightCm"));

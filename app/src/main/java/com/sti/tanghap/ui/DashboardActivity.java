@@ -91,12 +91,15 @@ public class DashboardActivity extends AppCompatActivity {
             String uid = currentUid();
             List<SessionEntity> sessions = AppDatabase.getInstance(this).sessionDao().getSinceForUser(uid, todayStart);
 
-            Intent intent = new Intent(this, SessionResultActivity.class);
-            if (sessions != null && !sessions.isEmpty()) {
-                // Pass the latest session of today
-                intent.putExtra("sessionId", sessions.get(sessions.size() - 1).id);
+            if (sessions == null || sessions.isEmpty()) {
+                runOnUiThread(() -> android.widget.Toast.makeText(this,
+                        "No monitoring session today yet. Tap the center button to start one.",
+                        android.widget.Toast.LENGTH_LONG).show());
+                return;
             }
-            // If empty, SessionResultActivity will handle the "No Data" state
+            // Open the latest session of today
+            Intent intent = new Intent(this, SessionResultActivity.class);
+            intent.putExtra("sessionId", sessions.get(sessions.size() - 1).id);
             runOnUiThread(() -> startActivity(intent));
         }));
     }
@@ -156,6 +159,13 @@ public class DashboardActivity extends AppCompatActivity {
                 .getString(LiveSessionActivity.PREF_LAST_DEVICE, null) != null;
         statusPill.setText(paired ? R.string.ready_caps : R.string.not_paired_caps);
 
+        // A session running in the background: the center button returns to it
+        if (com.sti.tanghap.monitor.MonitoringService.activeSession() != null) {
+            statusPill.setText(R.string.monitoring_caps);
+            tvSensorStatus.setText(R.string.sensor_monitoring_background);
+            return;
+        }
+
         long lastSession = getSharedPreferences(HealthPrefs.SESSION_PREFS, MODE_PRIVATE).getLong("last_timestamp", 0);
         if (lastSession > 0) {
             CharSequence when = DateUtils.getRelativeTimeSpanString(
@@ -187,11 +197,15 @@ public class DashboardActivity extends AppCompatActivity {
         String uid = currentUid();
         executor.execute(() -> {
             List<SessionEntity> newestFirst = AppDatabase.getInstance(this).sessionDao().getAllForUser(uid);
-            int n = Math.min(TREND_SESSIONS, newestFirst.size());
+            // Only sessions that recorded pressure; 0 means "not measured", not a weak inhalation
+            List<SessionEntity> measured = new ArrayList<>();
+            for (SessionEntity s : newestFirst) {
+                if (s.peakPressureKpa > 0) measured.add(s);
+                if (measured.size() == TREND_SESSIONS) break;
+            }
             List<Entry> entries = new ArrayList<>();
-            for (int i = 0; i < n; i++) {
-                SessionEntity s = newestFirst.get(n - 1 - i);
-                entries.add(new Entry(i, s.peakPressureKpa));
+            for (int i = 0; i < measured.size(); i++) {
+                entries.add(new Entry(i, measured.get(measured.size() - 1 - i).peakPressureKpa));
             }
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
@@ -223,9 +237,12 @@ public class DashboardActivity extends AppCompatActivity {
                     startActivity(new Intent(this, SettingsActivity.class));
                     return true;
                 case 2:
+                    // A session still running is saved for this account before signing out
+                    if (com.sti.tanghap.monitor.MonitoringService.activeSession() != null) {
+                        com.sti.tanghap.monitor.MonitoringService.activeSession().endAndSave();
+                    }
                     FirebaseAuth.getInstance().signOut();
                     HealthPrefs.clearUserData(this);
-                    com.facebook.login.LoginManager.getInstance().logOut();
                     Intent login = new Intent(this, LoginActivity.class);
                     login.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                     startActivity(login);
@@ -257,6 +274,7 @@ public class DashboardActivity extends AppCompatActivity {
                 .addOnSuccessListener(doc -> {
                     if (doc.exists()) {
                         com.sti.tanghap.data.ProfilePrefs.syncFromUserDoc(this, doc.getData());
+                        HealthPrefs.saveBirthdayAndAge(this, doc.get("birthday"), doc.get("age"));
                         Object healthMap = doc.get("healthProfile");
                         if (healthMap instanceof Map) {
                             HealthPrefs.saveFromHealthMap(this, (Map<String, Object>) healthMap);

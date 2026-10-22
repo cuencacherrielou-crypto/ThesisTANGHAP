@@ -4,10 +4,6 @@
     <!-- Google Sign-In -->
     <string name="default_web_client_id">871927999948-b5h2gmhsobd26r4h8ck3e6keknm6vsqj.apps.googleusercontent.com</string>
 
-    <!-- Facebook IDs -->
-    <string name="facebook_app_id">949544544482263</string>
-    <string name="fb_login_protocol_scheme">fb949544544482263</string>
-    <string name="facebook_client_token">fdaa99449df109d583258929e6f9d460</string>
     <string name="privacy_policy_url" translatable="false">https://cuencacherrielou-crypto.github.io/ThesisTANGHAP/privacy-policy.html</string>
 
     <string name="or_text">OR</string>
@@ -21,7 +17,6 @@
     <string name="already_have_account">Already have an account? Sign In</string>
     <string name="app_logo_desc">TANGHAP Logo</string>
     <string name="google_logo_desc">Google Logo</string>
-    <string name="facebook_logo_desc">Facebook Logo</string>
     <string name="back">Back</string>
     <string name="synced_caps">SYNCED</string>
     <string name="intelligent_monitoring">Intelligent Inhaler Monitoring</string>
@@ -36,7 +31,7 @@
 
     <!-- Dashboard Strings -->
     <string name="quick_tips">Quick Tips</string>
-    <string name="tip_inhale">Inhale deeply and hold for 10 seconds.</string>
+    <string name="tip_inhale">After inhaling your medicine, hold your breath for up to 10 seconds if you can.</string>
     <string name="tip_clean">Clean the mouthpiece regularly.</string>
     <string name="tip_charge">Keep your device charged.</string>
     <string name="tanghap_activity">TANGHAP Activity</string>
@@ -44,6 +39,8 @@
     <string name="sensor_last_session">Last session %1$s</string>
     <string name="sensor_no_session">No sessions yet</string>
     <string name="ready_caps">READY</string>
+    <string name="monitoring_caps">MONITORING</string>
+    <string name="sensor_monitoring_background">Monitoring in progress. Tap the center button to view it.</string>
     <string name="not_paired_caps">NOT PAIRED</string>
     <string name="bullet_separator">" • "</string>
     <string name="battery_unknown" formatted="false">--%</string>
@@ -61,19 +58,23 @@
     <string name="summary_placeholder">Summary info</string>
 
     <!-- Navigation Descriptions -->
-    <string name="nav_history_desc">History</string>
+    <string name="nav_history_desc">History and Trends</string>
     <string name="nav_alerts_desc">Alerts</string>
-    <string name="nav_live_desc">Live Monitoring</string>
-    <string name="nav_report_desc">Reports</string>
-    <string name="nav_scan_desc">Scan Device</string>
+    <string name="nav_live_desc">Start Live Monitoring</string>
+    <string name="nav_report_desc">Today\'s Report</string>
+    <string name="nav_scan_desc">Connect Inhaler Device</string>
+    <string name="nav_history_label">Trends</string>
+    <string name="nav_alerts_label">Alerts</string>
+    <string name="nav_report_label">Report</string>
+    <string name="nav_scan_label">Device</string>
 
     <!-- About Strings -->
     <string name="about_tanghap">About TANGHAP</string>
     <string name="app_version">Version 1.0.0</string>
     <string name="what_is_tanghap">What is TANGHAP?</string>
-    <string name="tanghap_description">TANGHAP (Intelligent Inhaler Monitoring) is a specialized application designed to assist patients in monitoring their inhaler usage using smart sensing technology.</string>
+    <string name="tanghap_description">TANGHAP (Intelligent Inhaler Monitoring) works with a smart inhaler attachment to track your breathing rate, inhalation effort, inhaler use and coughs. An on-device AI model classifies cough sounds, and the app gives a preliminary, non-diagnostic assessment to help you and your doctor follow your respiratory condition over time.</string>
     <string name="key_features">Key Features</string>
-    <string name="features_list">• Real-time Pressure Monitoring\n• Session History &amp; Trends\n• Automated Alert System\n• Secure Data Analytics</string>
+    <string name="features_list">• Live breathing rate and inhalation pressure monitoring\n• On-device AI cough classification (dry, wet, persistent, severe, wheezing)\n• Preliminary assessment worded as a possibility, never a diagnosis\n• Matching over-the-counter medicine guidance (recommendation only)\n• Inhaler press tracking and dose reminders\n• Monitoring continues in the background\n• Time-stamped history, daily summaries and trends\n• Alerts, emergency contact and nearby hospitals\n• PDF report for your doctor</string>
     <string name="copyright">© 2026 TANGHAP Project Team\nDeveloped for Academic Research</string>
 
     <!-- Change Password Strings -->
@@ -94,6 +95,8 @@
     <string name="q_sex">What is your biological sex?</string>
     <string name="male">Male</string>
     <string name="female">Female</string>
+    <string name="birthday_hint">Birthday (MM/DD/YYYY)</string>
+    <string name="birthday_helper">Used to compare your breathing rate with the normal range for your age.</string>
     <string name="height_hint">Height (cm)</string>
     <string name="weight_hint">Weight (kg)</string>
     <string name="q_smoke">Do you currently smoke or vape?</string>
@@ -129,21 +132,6 @@
     <string name="cough_weekly">Weekly</string>
     <string name="cough_monthly">Monthly</string>
     <string name="cough_rarely">Rarely</string>
-
-    <!-- Live Session Analysis -->
-    <string name="apnea_detected">Apnea Detected</string>
-    <string name="critical_apnea">CRITICAL: Seek immediate medical attention or use emergency inhaler.</string>
-    <string name="zero_bpm">0 BPM</string>
-    <string name="bpm_format">%1$d BPM</string>
-    <string name="pattern_bradypnea">Bradypnea</string>
-    <string name="rec_bradypnea">Breathing is slow. Ensure your airway is clear and sit upright.</string>
-    <string name="pattern_tachypnea">Tachypnea</string>
-    <string name="rec_tachypnea">Rapid breathing detected. Try to stay calm and use prescribed reliever.</string>
-    <string name="pattern_eupnea">Eupnea (Normal)</string>
-    <string name="rec_eupnea">Your breathing pattern is within normal range.</string>
-    <string name="pattern_kussmaul">Kussmaul Breathing</string>
-    <string name="rec_kussmaul">Deep, rapid breathing detected. This may indicate severe respiratory distress.</string>
-    <string name="coughing_detected">Coughing detected. Monitor for chest tightness.</string>
 
     <!-- Chart Labels -->
     <string name="label_breathing">Breathing</string>

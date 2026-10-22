@@ -1,9 +1,7 @@
 package com.sti.tanghap.ai.processor;
 
-import org.jtransforms.fft.FloatFFT_1D;
-
 /**
- * Advanced Signal Processing for TANGHAP Sensors
+ * Signal processing for the pressure sensor: smoothing and breath peak counting.
  */
 public class SignalProcessor {
 
@@ -19,33 +17,6 @@ public class SignalProcessor {
             output[i] = output[i - 1] + alpha * (input[i] - output[i - 1]);
         }
         return output;
-    }
-
-    /**
-     * Performs FFT on audio or pressure waveforms to extract frequency domain features.
-     */
-    public static float[] computeFFT(float[] signal) {
-        if (signal == null || signal.length == 0) return new float[0];
-        int n = signal.length;
-        FloatFFT_1D fft = new FloatFFT_1D(n);
-        
-        // Using complexForward for easier magnitude calculation and predictability
-        float[] fftData = new float[n * 2];
-        for (int i = 0; i < n; i++) {
-            fftData[2 * i] = signal[i];
-            fftData[2 * i + 1] = 0;
-        }
-        
-        fft.complexForward(fftData);
-        
-        // Extract magnitude spectrum (first half)
-        float[] magnitudes = new float[n / 2];
-        for (int i = 0; i < n / 2; i++) {
-            float re = fftData[2 * i];
-            float im = fftData[2 * i + 1];
-            magnitudes[i] = (float) Math.sqrt(re * re + im * im);
-        }
-        return magnitudes;
     }
 
     /**

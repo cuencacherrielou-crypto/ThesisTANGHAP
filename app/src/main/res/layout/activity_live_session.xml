@@ -149,7 +149,7 @@
                 app:strokeWidth="1dp"
                 app:strokeColor="@color/divider">
                 <RelativeLayout android:layout_width="match_parent" android:layout_height="match_parent" android:padding="12dp">
-                    <TextView android:id="@+id/labelCough" android:text="Cough Spectral Intensity" android:textColor="@color/error" android:textStyle="bold" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                    <TextView android:id="@+id/labelCough" android:text="Cough Detection (AI confidence %)" android:textColor="@color/error" android:textStyle="bold" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
                     <com.github.mikephil.charting.charts.BarChart android:id="@+id/chartCough" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_below="@id/labelCough" android:layout_marginTop="4dp"/>
                 </RelativeLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -158,7 +158,7 @@
                 android:id="@+id/btnEndSession"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
-                android:text="Finish AI Monitoring"
+                android:text="End &amp; Save Session"
                 android:backgroundTint="@color/error"
                 app:cornerRadius="16dp"
                 android:layout_marginTop="16dp"

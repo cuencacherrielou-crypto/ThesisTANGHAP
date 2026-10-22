@@ -1,10 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Connect Device: Bluetooth with search waves -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="@android:color/white"
-        android:pathData="M17.71,7.71L12,2H11V9.17L6.41,4.59L5,6L10.59,11.58L5,17.17L6.41,18.58L11,14V21.17H12L17.71,15.46L13.25,11L17.71,7.71M13,5.83L15.59,8.41L13,11V5.83M13,18.17V13L15.59,15.58L13,18.17Z" />
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4,7L14,17L9,22V2L14,7L4,17" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M17,9a4.5,4.5 0,0 1,0 6" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M19.8,6.5a8.5,8.5 0,0 1,0 11" />
 </vector>

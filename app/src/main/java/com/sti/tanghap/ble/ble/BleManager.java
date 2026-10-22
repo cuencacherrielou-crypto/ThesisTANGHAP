@@ -44,7 +44,7 @@ public class BleManager {
     private BluetoothGatt gatt;
 
     private BluetoothGattCharacteristic pressureChar;
-    private BluetoothGattCharacteristic coughChar;
+    private BluetoothGattCharacteristic audioChar;
     private BluetoothGattCharacteristic actChar;
     private BluetoothGattCharacteristic batteryChar;
     private BluetoothGattCharacteristic deviceInfoChar;
@@ -164,7 +164,7 @@ public class BleManager {
                     }
                 }
 
-                boolean isTanghap = name.toUpperCase().contains("TANGHAP");
+                boolean isTanghap = name.toUpperCase(java.util.Locale.ROOT).contains("TANGHAP");
                 boolean hasService = false;
 
                 if (result.getScanRecord() != null && result.getScanRecord().getServiceUuids() != null) {
@@ -219,29 +219,48 @@ public class BleManager {
     // CONNECT & DISCONNECT
     // =========================================================
 
+    /**
+     * Starts connecting. Returns false when no attempt could start (Bluetooth off, no
+     * permission or a bad address); a started attempt ends in onConnected or onDisconnected.
+     */
     @SuppressLint("MissingPermission")
-    public void connect(String address) {
+    public boolean connect(String address) {
         if (!isBluetoothEnabled()) {
-            listener.onError("Bluetooth is OFF.");
-            return;
+            listener.onError("Bluetooth is OFF. Turn it on to continue monitoring.");
+            return false;
         }
 
         if (!hasConnectPermission()) {
             listener.onError("Missing Bluetooth connection permission.");
-            return;
+            return false;
         }
 
         stopScan();
 
-        BluetoothDevice device = adapter.getRemoteDevice(address);
+        BluetoothDevice device;
+        try {
+            device = adapter.getRemoteDevice(address);
+        } catch (IllegalArgumentException e) {
+            listener.onError("Invalid device address. Please scan for the device again.");
+            return false;
+        }
         Log.d(TAG, "Connecting to: " + address);
 
+        // Close any previous connection object first; Android allows only a few at a time
+        if (gatt != null) {
+            try {
+                gatt.close();
+            } catch (Exception ignored) {
+            }
+            gatt = null;
+        }
         gatt = device.connectGatt(
                 ctx,
                 false,
                 gattCallback,
                 BluetoothDevice.TRANSPORT_LE
         );
+        return gatt != null;
     }
 
     @SuppressLint("MissingPermission")
@@ -342,7 +361,7 @@ public class BleManager {
             Log.d(TAG, "TANGHAP service found.");
 
             pressureChar = service.getCharacteristic(BleUuids.PRESSURE_STREAM_CHAR);
-            coughChar = service.getCharacteristic(BleUuids.COUGH_EVENT_CHAR); // Characteristic AB02
+            audioChar = service.getCharacteristic(BleUuids.AUDIO_STREAM_CHAR); // Characteristic AB02: microphone audio
             actChar = service.getCharacteristic(BleUuids.ACTUATION_EVENT_CHAR);
             batteryChar = service.getCharacteristic(BleUuids.BATTERY_CHAR);
             deviceInfoChar = service.getCharacteristic(BleUuids.DEVICE_INFO_CHAR);
@@ -419,11 +438,11 @@ public class BleManager {
                 for (int i = 0; i < pkt.kpaSamples.size(); i++) {
                     arr[i] = pkt.kpaSamples.get(i);
                 }
-                listener.onPressureSamples(arr);
+                listener.onPressureSamples(pkt.sequence, arr);
             }
 
             // 2. INMP441 AUDIO STREAM DATA (CHARACTERISTIC AB02)
-        } else if (BleUuids.COUGH_EVENT_CHAR.equals(uuid)) {
+        } else if (BleUuids.AUDIO_STREAM_CHAR.equals(uuid)) {
             if (value != null && value.length > 0) {
                 listener.onAudioDataReceived(value);
             }
@@ -457,7 +476,7 @@ public class BleManager {
         notifyQueue.clear();
 
         if (pressureChar != null) notifyQueue.add(pressureChar);
-        if (coughChar != null) notifyQueue.add(coughChar);
+        if (audioChar != null) notifyQueue.add(audioChar);
         if (actChar != null) notifyQueue.add(actChar);
         if (batteryChar != null) notifyQueue.add(batteryChar);
 

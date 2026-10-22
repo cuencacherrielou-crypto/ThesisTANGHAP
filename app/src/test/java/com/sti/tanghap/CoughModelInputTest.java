@@ -31,7 +31,7 @@ public class CoughModelInputTest {
         assertTrue(CoughClass.SEVERE_COUGH.isCough);
         assertFalse(CoughClass.WHEEZING.isCough);
         assertFalse(CoughClass.NON_COUGH.isCough);
-        assertEquals("Wheezing Detected (91%)", CoughClass.WHEEZING.displayText(91));
+        assertEquals("Wheezing-like Sound Detected (91%)", CoughClass.WHEEZING.displayText(91));
         assertEquals("Cough Detected: Wet cough (87%)", CoughClass.WET_COUGH.displayText(87));
         assertEquals("Dry cough (64% confidence)", CoughClass.DRY_COUGH.findingText(64));
     }

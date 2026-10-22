@@ -70,9 +70,6 @@ dependencies {
     // Google Sign-In
     implementation("com.google.android.gms:play-services-auth:21.3.0")
 
-    // Facebook SDK
-    implementation("com.facebook.android:facebook-login:18.2.3")
-
     // Chart
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
 

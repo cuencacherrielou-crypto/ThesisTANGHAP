@@ -56,13 +56,20 @@ public final class NotificationHelper {
     }
 
     /** Shows a notification that opens the Alerts screen. Does nothing without permission or when turned off in Settings. */
-    @SuppressLint("MissingPermission")
     public static void show(Context ctx, int id, String title, String text) {
+        show(ctx, id, title, text, new Intent(ctx, AlertsActivity.class));
+    }
+
+    /**
+     * Shows a notification that opens the given screen. Does nothing without permission or
+     * when turned off in Settings.
+     */
+    @SuppressLint("MissingPermission")
+    public static void show(Context ctx, int id, String title, String text, Intent open) {
         if (!enabledInSettings(ctx, id) || !canNotify(ctx)) return;
         ensureChannel(ctx);
 
-        Intent open = new Intent(ctx, AlertsActivity.class);
-        open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pi = PendingIntent.getActivity(ctx, id, open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 

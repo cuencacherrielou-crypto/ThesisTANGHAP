@@ -25,7 +25,7 @@ public class PanelRevisionLogicTest {
         AssessmentEngine.AssessmentResult r = new AssessmentEngine().generatePreliminaryAssessment(
                 bpm(16), CoughClass.WHEEZING, false, false, false);
         assertTrue(r.wheezeDetected);
-        assertEquals("Early Detection of Asthma", r.otcCategory);
+        assertEquals(AssessmentEngine.CATEGORY_ASTHMA, r.possibleCondition);
         assertTrue(r.recommendHospital);
     }
 
@@ -34,14 +34,14 @@ public class PanelRevisionLogicTest {
         AssessmentEngine.AssessmentResult r = new AssessmentEngine().generatePreliminaryAssessment(
                 bpm(16), null, false, false, false);
         assertFalse(r.wheezeDetected);
-        assertEquals("Standard Respiratory Evaluation", r.otcCategory);
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.possibleCondition);
     }
 
     @Test
     public void persistentCough_withCopdHistory_givesCopdFinding() {
         AssessmentEngine.AssessmentResult r = new AssessmentEngine().generatePreliminaryAssessment(
                 bpm(16), CoughClass.PERSISTENT_COUGH, false, true, false);
-        assertEquals("COPD Assessment", r.otcCategory);
+        assertEquals(AssessmentEngine.CATEGORY_COPD, r.possibleCondition);
     }
 
     // ---------- Inhalation duration ----------

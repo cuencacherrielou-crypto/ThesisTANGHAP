@@ -35,6 +35,32 @@
                 android:orientation="vertical"
                 android:padding="20dp">
 
+                <!-- Only shown when the account has no birthday yet (e.g. signed up with Google) -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/tilOnboardBirthday"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    android:hint="@string/birthday_hint"
+                    android:visibility="gone"
+                    app:helperText="@string/birthday_helper"
+                    app:boxStrokeColor="@color/accent_teal"
+                    app:hintTextColor="@color/accent_teal"
+                    app:boxCornerRadiusTopStart="12dp"
+                    app:boxCornerRadiusTopEnd="12dp"
+                    app:boxCornerRadiusBottomStart="12dp"
+                    app:boxCornerRadiusBottomEnd="12dp">
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etOnboardBirthday"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:focusable="false"
+                        android:clickable="true"
+                        android:inputType="none"
+                        android:textColor="@color/text_high_emphasis"/>
+                </com.google.android.material.textfield.TextInputLayout>
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"

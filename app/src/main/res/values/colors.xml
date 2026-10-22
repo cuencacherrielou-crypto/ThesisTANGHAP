@@ -24,4 +24,5 @@
     <color name="surface_glass">#E2E8F0</color>
     <color name="glass_bg">#F2FFFFFF</color>
     <color name="glass_border">#1A0F172A</color>
+    <color name="launcher_background">#FFFFFF</color>
 </resources>

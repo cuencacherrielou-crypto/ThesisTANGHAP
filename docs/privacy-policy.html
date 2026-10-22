@@ -35,8 +35,8 @@
   <p><strong>Account information</strong></p>
   <ul>
     <li>Your name, email address, username, age and birthday.</li>
-    <li>If you sign in with Google or Facebook, we receive only your name and email address from that
-      service. We never receive your Google or Facebook password, and we do not post anything to your accounts.</li>
+    <li>If you sign in with Google, we receive only your name and email address from Google. We never
+      receive your Google password, and we do not post anything to your account.</li>
   </ul>
   <p><strong>Health profile (entered by you)</strong></p>
   <ul>
@@ -56,13 +56,20 @@
     <li>Inhalation pressure readings, breathing rate, inhalation duration and inhaler presses.</li>
     <li>Cough count and the cough type detected (dry, wet, persistent or severe cough, or wheezing),
       with the model's confidence.</li>
-    <li>The preliminary assessment, observations and over-the-counter guidance shown to you.</li>
+    <li>The date and time of each reading and event (for example when a cough was heard, when the inhaler
+      was pressed, and the breathing rate every few seconds), and whether the device lost its connection
+      or any readings during the session.</li>
+    <li>The preliminary assessment (a possible condition, never a diagnosis), observations and
+      over-the-counter guidance shown to you.</li>
   </ul>
   <p><strong>Sound from the inhaler attachment</strong></p>
   <ul>
     <li>The attachment's microphone sends sound to your phone over Bluetooth during a session.</li>
     <li>The sound is analyzed on your phone by the built-in cough model. Audio recordings are not saved
       and are never uploaded. Only the result (for example "Wet cough, 87% confidence") is kept.</li>
+    <li>If you calibrate cough detection, the app keeps one number on your phone: how loud your own cough
+      is at the device. It is used only to leave out quieter coughs from people near you. Coughs that were
+      left out, or that you removed, stay listed in the session so you can count them back in.</li>
   </ul>
   <p><strong>App and device information</strong></p>
   <ul>
@@ -100,8 +107,9 @@
   <ul>
     <li><strong>Google Firebase</strong>: stores your account and data, and provides crash reports and
       usage statistics on our behalf.</li>
-    <li><strong>Google or Meta (Facebook)</strong>: only to sign you in, if you choose that sign-in method.</li>
-    <li><strong>People you choose</strong>: the doctor report (PDF) is shared only when you send it yourself,
+    <li><strong>Google Sign-In</strong>: only to sign you in, if you choose that sign-in method.</li>
+    <li><strong>People you choose</strong>: the doctor report (PDF) is saved in your phone's Downloads/TANGHAP
+      folder, where other apps on your phone can open it, and is shared only when you send it yourself,
       and the emergency button only opens your phone's dialer.</li>
   </ul>
   <p>We may disclose information if required by law.</p>

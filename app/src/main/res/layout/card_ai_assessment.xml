@@ -35,6 +35,17 @@
             android:textSize="16sp"
             android:textStyle="bold"/>
 
+        <!-- Possible condition, always worded as a possibility (never a diagnosis) -->
+        <TextView
+            android:id="@+id/tvPossibleCondition"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="@color/warning"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:visibility="gone"/>
+
         <TextView
             android:id="@+id/tvAiObservations"
             android:layout_width="match_parent"
@@ -60,7 +71,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Possible Guidance (OTC Category):"
+                android:text="Medicine Guidance:"
                 android:textColor="@color/primary_light"
                 android:textSize="12sp"
                 android:textStyle="bold"/>
@@ -69,7 +80,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="Suppressants for non-productive cough."
+                android:text=""
                 android:textColor="@color/text_high_emphasis"
                 android:textSize="13sp"/>
         </LinearLayout>
