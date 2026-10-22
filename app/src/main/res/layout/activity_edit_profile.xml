@@ -141,7 +141,7 @@
                     </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
 
-                <!-- Personal Health Record Section -->
+                <!-- Health details editor (read-only view: HealthInfoActivity) -->
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
@@ -152,7 +152,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Personal Health Record (Pre-Assessment Baseline)"
+                    android:text="Update Health Details"
                     android:textColor="@color/accent_teal"
                     android:textSize="13sp"
                     android:textStyle="bold"

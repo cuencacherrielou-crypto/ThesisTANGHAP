@@ -14,15 +14,27 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Settings"
+            android:text="@string/menu_settings"
             android:textColor="@color/text_high_emphasis"
             android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <!-- ============ ACCOUNT ============ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp"
+            android:layout_marginStart="4dp"
+            android:text="@string/settings_section_account"
+            android:textAllCaps="true"
+            android:textColor="@color/accent_teal"
+            android:textSize="13sp"
             android:textStyle="bold" />
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
             app:cardCornerRadius="24dp"
             app:cardElevation="0dp"
             app:cardBackgroundColor="@android:color/transparent"
@@ -36,29 +48,30 @@
                 android:orientation="vertical"
                 android:padding="8dp">
 
-                <!-- Dark Mode Toggle -->
+                <!-- Personal Health Information -->
                 <LinearLayout
+                    android:id="@+id/btnHealthInfo"
                     android:layout_width="match_parent"
                     android:layout_height="60dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
                     android:gravity="center_vertical"
                     android:paddingHorizontal="16dp">
                     <ImageView
                         android:layout_width="24dp"
                         android:layout_height="24dp"
-                        android:src="@drawable/ic_nav_alerts"
+                        android:src="@android:drawable/ic_menu_agenda"
+                        android:importantForAccessibility="no"
                         app:tint="@color/accent_teal" />
                     <TextView
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="16dp"
                         android:layout_weight="1"
-                        android:text="Dark Mode"
+                        android:text="@string/personal_health_info"
                         android:textColor="@color/text_high_emphasis"
                         android:textSize="16sp" />
-                    <com.google.android.material.switchmaterial.SwitchMaterial
-                        android:id="@+id/switchDarkMode"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" />
                 </LinearLayout>
 
                 <View
@@ -81,6 +94,7 @@
                         android:layout_width="24dp"
                         android:layout_height="24dp"
                         android:src="@android:drawable/ic_menu_edit"
+                        android:importantForAccessibility="no"
                         app:tint="@color/accent_teal" />
                     <TextView
                         android:layout_width="0dp"
@@ -112,6 +126,7 @@
                         android:layout_width="24dp"
                         android:layout_height="24dp"
                         android:src="@android:drawable/ic_lock_idle_lock"
+                        android:importantForAccessibility="no"
                         app:tint="@color/accent_teal" />
                     <TextView
                         android:layout_width="0dp"
@@ -122,6 +137,77 @@
                         android:textColor="@color/text_high_emphasis"
                         android:textSize="16sp" />
                 </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ============ NOTIFICATIONS ============ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp"
+            android:layout_marginStart="4dp"
+            android:text="@string/settings_section_notifications"
+            android:textAllCaps="true"
+            android:textColor="@color/accent_teal"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="@android:color/transparent"
+            app:strokeWidth="1dp"
+            app:strokeColor="@color/glass_border">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_glass_card"
+                android:orientation="vertical"
+                android:padding="8dp">
+
+                <!-- Health alert notifications -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="60dp"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="8dp">
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_nav_alerts"
+                        android:importantForAccessibility="no"
+                        app:tint="@color/accent_teal" />
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/alert_notifications"
+                            android:textColor="@color/text_high_emphasis"
+                            android:textSize="16sp" />
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/alert_notifications_desc"
+                            android:textColor="@color/text_medium_emphasis"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchAlertNotifications"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="@string/alert_notifications" />
+                </LinearLayout>
 
                 <View
                     android:layout_width="match_parent"
@@ -129,9 +215,80 @@
                     android:layout_marginHorizontal="16dp"
                     android:background="@color/divider" />
 
-                <!-- About -->
+                <!-- Dose reminders -->
                 <LinearLayout
-                    android:id="@+id/btnAbout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="60dp"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="8dp">
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@android:drawable/ic_popup_reminder"
+                        android:importantForAccessibility="no"
+                        app:tint="@color/accent_teal" />
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/dose_reminders"
+                            android:textColor="@color/text_high_emphasis"
+                            android:textSize="16sp" />
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/dose_reminders_desc"
+                            android:textColor="@color/text_medium_emphasis"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchDoseReminders"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="@string/dose_reminders" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ============ DEVICE & DATA ============ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp"
+            android:layout_marginStart="4dp"
+            android:text="@string/settings_section_device_data"
+            android:textAllCaps="true"
+            android:textColor="@color/accent_teal"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="@android:color/transparent"
+            app:strokeWidth="1dp"
+            app:strokeColor="@color/glass_border">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_glass_card"
+                android:orientation="vertical"
+                android:padding="8dp">
+
+                <!-- Export report -->
+                <LinearLayout
+                    android:id="@+id/btnExportReport"
                     android:layout_width="match_parent"
                     android:layout_height="60dp"
                     android:background="?attr/selectableItemBackground"
@@ -142,14 +299,15 @@
                     <ImageView
                         android:layout_width="24dp"
                         android:layout_height="24dp"
-                        android:src="@android:drawable/ic_dialog_info"
+                        android:src="@android:drawable/ic_menu_share"
+                        android:importantForAccessibility="no"
                         app:tint="@color/accent_teal" />
                     <TextView
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="16dp"
                         android:layout_weight="1"
-                        android:text="About TANGHAP"
+                        android:text="@string/export_full_report"
                         android:textColor="@color/text_high_emphasis"
                         android:textSize="16sp" />
                 </LinearLayout>
@@ -174,6 +332,7 @@
                         android:layout_width="24dp"
                         android:layout_height="24dp"
                         android:src="@android:drawable/stat_notify_sync"
+                        android:importantForAccessibility="no"
                         app:tint="@color/accent_teal" />
                     <TextView
                         android:layout_width="0dp"
@@ -181,6 +340,141 @@
                         android:layout_marginStart="16dp"
                         android:layout_weight="1"
                         android:text="Sync Data"
+                        android:textColor="@color/text_high_emphasis"
+                        android:textSize="16sp" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginHorizontal="16dp"
+                    android:background="@color/divider" />
+
+                <!-- Forget paired inhaler -->
+                <LinearLayout
+                    android:id="@+id/btnForgetInhaler"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="60dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="8dp">
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_nav_scan"
+                        android:importantForAccessibility="no"
+                        app:tint="@color/accent_teal" />
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/forget_inhaler"
+                            android:textColor="@color/text_high_emphasis"
+                            android:textSize="16sp" />
+                        <TextView
+                            android:id="@+id/tvPairedInhaler"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/text_medium_emphasis"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ============ APP ============ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp"
+            android:layout_marginStart="4dp"
+            android:text="@string/settings_section_app"
+            android:textAllCaps="true"
+            android:textColor="@color/accent_teal"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="@android:color/transparent"
+            app:strokeWidth="1dp"
+            app:strokeColor="@color/glass_border">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_glass_card"
+                android:orientation="vertical"
+                android:padding="8dp">
+
+                <!-- Dark Mode Toggle -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="60dp"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="16dp">
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_nav_settings"
+                        android:importantForAccessibility="no"
+                        app:tint="@color/accent_teal" />
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_weight="1"
+                        android:text="@string/dark_mode"
+                        android:textColor="@color/text_high_emphasis"
+                        android:textSize="16sp" />
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchDarkMode"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="@string/dark_mode" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginHorizontal="16dp"
+                    android:background="@color/divider" />
+
+                <!-- About -->
+                <LinearLayout
+                    android:id="@+id/btnAbout"
+                    android:layout_width="match_parent"
+                    android:layout_height="60dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="16dp">
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@android:drawable/ic_dialog_info"
+                        android:importantForAccessibility="no"
+                        app:tint="@color/accent_teal" />
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_weight="1"
+                        android:text="@string/about_tanghap"
                         android:textColor="@color/text_high_emphasis"
                         android:textSize="16sp" />
                 </LinearLayout>
@@ -195,6 +489,15 @@
             android:gravity="center"
             android:text="Logged in as: ..."
             android:textColor="@color/text_medium_emphasis"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tvVersion"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:textColor="@color/text_low_emphasis"
             android:textSize="12sp" />
 
         <com.google.android.material.button.MaterialButton

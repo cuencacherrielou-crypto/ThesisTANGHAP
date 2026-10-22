@@ -159,4 +159,27 @@
 
     <!-- Settings -->
     <string name="dark_mode">Dark Mode</string>
+    <string name="settings_section_account">Account</string>
+    <string name="settings_section_notifications">Notifications</string>
+    <string name="settings_section_device_data">Device &amp; Data</string>
+    <string name="settings_section_app">App</string>
+    <string name="alert_notifications">Health Alert Notifications</string>
+    <string name="alert_notifications_desc">Worsening readings and inhaler connection issues</string>
+    <string name="dose_reminders">Dose Reminders</string>
+    <string name="dose_reminders_desc">Remind me when a prescribed dose is late or missed</string>
+    <string name="export_full_report">Export Health Report (PDF)</string>
+    <string name="forget_inhaler">Forget Paired Inhaler</string>
+    <string name="forget_inhaler_none">No inhaler paired yet</string>
+    <string name="forget_inhaler_confirm">Forget the paired inhaler? You will need to scan and select it again before your next session.</string>
+    <string name="action_forget">Forget</string>
+    <string name="inhaler_forgotten">Paired inhaler removed.</string>
+    <string name="sync_started">Sync started. Your data will upload when you are online.</string>
+    <string name="notifications_blocked">Notifications are turned off for TANGHAP in your phone settings.</string>
+    <string name="version_format">TANGHAP version %1$s</string>
+
+    <!-- Personal Health Information -->
+    <string name="personal_health_info">Personal Health Information</string>
+    <string name="update_health_info">Update Information</string>
+    <string name="health_info_empty">No health information yet. Tap Update Information to add your details.</string>
+    <string name="health_info_note">Only the answers you provided are shown. These details are used to personalize your preliminary assessment and are not a diagnosis.</string>
 </resources>
