@@ -14,11 +14,35 @@
       },
       "oauth_client": [
         {
+          "client_id": "871927999948-652isjuj7memj8t2etp7hp5l1c4o8dkr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sti.tanghap",
+            "certificate_hash": "63c55e414e39011cb9cba1659353fd41670d8853"
+          }
+        },
+        {
+          "client_id": "871927999948-7vr4vk0t2np6l52ef0in6mnvhtjjdm7g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sti.tanghap",
+            "certificate_hash": "63c55e414e39011cb9cba1659353fd41670d885e"
+          }
+        },
+        {
           "client_id": "871927999948-l4oamqhiqe9ec0p9b0onmc34s753mb42.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.sti.tanghap",
             "certificate_hash": "04f446cc52d1818e02f62feea3bfad8381eb5ee3"
+          }
+        },
+        {
+          "client_id": "871927999948-tst6fh1v5i772tl31ulj1na64qasocqt.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sti.tanghap",
+            "certificate_hash": "f122a40b7cb61e9ce6ed444fbbab805d4cdb7bea"
           }
         },
         {
