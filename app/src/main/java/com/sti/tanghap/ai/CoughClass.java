@@ -9,6 +9,7 @@ public enum CoughClass {
     DRY_COUGH("Dry cough", true),
     NON_COUGH("No significant cough", false),
     PERSISTENT_COUGH("Persistent cough", true),
+    /** Measured from the cough history (CoughHistory), never from one cough's sound. */
     SEVERE_COUGH("Severe cough", true),
     WET_COUGH("Wet cough", true),
     WHEEZING("Wheezing", false);

@@ -5,7 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Breathing pattern from the device microphone (the pressure sensor is not used). A port of
+ * Breathing pattern from the device microphone. A port of
  * tools/breath_detect.py, which was tested on breathing recordings found online and on TANGHAP
  * device sessions; the app shows only the pattern it gives (normal / rapid / slow), never a number.
  *

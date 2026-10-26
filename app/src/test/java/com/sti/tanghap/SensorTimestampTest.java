@@ -9,7 +9,6 @@ import com.sti.tanghap.data.SessionEvent;
 import com.sti.tanghap.domain.AgeCalculator;
 import com.sti.tanghap.domain.AlertEngine;
 import com.sti.tanghap.domain.BaselineCalculator;
-import com.sti.tanghap.domain.InhalationTracker;
 import com.sti.tanghap.domain.SessionTimeline;
 import com.sti.tanghap.notify.DoseCheck;
 
@@ -60,55 +59,41 @@ public class SensorTimestampTest {
         assertEquals(10L, back.get(0).timeMillis);
     }
 
-    // ---------- Inhalation start times ----------
-
-    @Test
-    public void inhalation_hasEstimatedStartTime() {
-        InhalationTracker t = new InhalationTracker();
-        // 10 samples per packet, one packet every 100 ms -> 10 ms per sample
-        float[] quiet = new float[10];
-        float[] inhale = new float[10];
-        for (int i = 0; i < inhale.length; i++) inhale[i] = (i % 2 == 0) ? -3f : -2.9f;
-        long time = 1_000;
-        t.addSamples(quiet, time);          // t=1000
-        t.addSamples(quiet, time += 100);   // t=1100
-        t.addSamples(inhale, time += 100);  // t=1200: inhalation starts at the packet's first sample
-        t.addSamples(inhale, time += 100);
-        t.addSamples(quiet, time += 100);
-        t.finish();
-
-        List<InhalationTracker.Inhalation> list = t.getInhalations();
-        assertEquals(1, list.size());
-        // First sample of the packet that arrived at 1200 was sampled 9 x 10 ms earlier
-        assertEquals(1110L, list.get(0).startMillis);
-        assertEquals(200L, list.get(0).durationMillis);
-        assertEquals(3f, list.get(0).peakKpa, 0.001f);
-    }
-
     // ---------- Timeline summaries ----------
 
     @Test
-    public void timeline_summariesAndPerMinuteAverages() {
-        long start = 0;
+    public void timeline_listsKeyEventsOnly() {
         List<SessionEvent> events = Arrays.asList(
+                // older sessions' air-pressure readings still load but are not listed
                 new SessionEvent(10_000, SessionEvent.Type.BREATHING_RATE, 14, ""),
-                new SessionEvent(20_000, SessionEvent.Type.BREATHING_RATE, 16, ""),
-                new SessionEvent(70_000, SessionEvent.Type.BREATHING_RATE, 22, ""),
-                new SessionEvent(30_000, SessionEvent.Type.COUGH, 90, "Dry cough"),
-                new SessionEvent(40_000, SessionEvent.Type.INHALATION, 2000, "3.0"));
-        assertEquals("3 readings, lowest 14 BPM, highest 22 BPM", SessionTimeline.breathingRateSummary(events));
-        assertEquals("1 inhalation, average 2.0 s, longest 2.0 s", SessionTimeline.inhalationSummary(events));
-
-        List<long[]> perMinute = SessionTimeline.breathingRatePerMinute(events, start);
-        assertEquals(2, perMinute.size());
-        assertEquals(0L, perMinute.get(0)[0]);
-        assertEquals(15L, perMinute.get(0)[1]);
-        assertEquals(60_000L, perMinute.get(1)[0]);
-        assertEquals(22L, perMinute.get(1)[1]);
-
+                new SessionEvent(40_000, SessionEvent.Type.INHALATION, 2000, "3.0"),
+                // audio gaps are summed up in the data-quality line instead
+                new SessionEvent(20_000, SessionEvent.Type.AUDIO_GAP, 120, ""),
+                new SessionEvent(30_000, SessionEvent.Type.COUGH, 90, "Dry cough"));
         List<String> lines = SessionTimeline.keyEventLines(events, Locale.US);
         assertEquals(1, lines.size());
         assertTrue(lines.get(0).contains("Cough detected: Dry cough (90% confidence)"));
+    }
+
+    @Test
+    public void dataQuality_sumsTheAudioLostOverBluetooth() {
+        List<SessionEvent> events = Arrays.asList(
+                new SessionEvent(10_000, SessionEvent.Type.AUDIO_GAP, 120, ""),
+                new SessionEvent(20_000, SessionEvent.Type.AUDIO_GAP, 280, ""));
+        assertEquals("Data quality: 2 Bluetooth data gaps (about 0.4 s of audio lost and filled in); "
+                + "readings may be slightly incomplete.", SessionTimeline.dataQualitySummary(2, events));
+        assertNull(SessionTimeline.dataQualitySummary(0, events));
+        // older sessions counted lost air-pressure packets, with no audio-gap events
+        assertEquals("Data quality: 1 Bluetooth data gap; readings may be slightly incomplete.",
+                SessionTimeline.dataQualitySummary(1, new ArrayList<>()));
+    }
+
+    @Test
+    public void audioGap_roundTripsAndDescribes() {
+        List<SessionEvent> back = SessionEvent.decode(SessionEvent.encode(Arrays.asList(
+                new SessionEvent(5, SessionEvent.Type.AUDIO_GAP, 250, ""))));
+        assertEquals(SessionEvent.Type.AUDIO_GAP, back.get(0).type);
+        assertEquals("Audio gap: 250 ms lost over Bluetooth (filled in)", back.get(0).describe());
     }
 
     // ---------- Doses counted by time stamp ----------
@@ -146,25 +131,25 @@ public class SensorTimestampTest {
         assertEquals(AgeCalculator.UNKNOWN, AgeCalculator.resolve("N/A", "N/A", today));
     }
 
-    // ---------- Sessions without pressure data ----------
+    // ---------- Older sessions with air-pressure data ----------
 
     @Test
-    public void baseline_ignoresSessionsWithoutPressure() {
+    public void baseline_usesCoughsAndPressesOnly() {
         SessionEntity a = new SessionEntity("a");
-        a.peakPressureKpa = 10f;
+        a.peakPressureKpa = 10f;            // older session: still loads, no longer used
         a.inhaleDurationMillis = 2000;
-        SessionEntity b = new SessionEntity("b"); // nothing measured
+        a.coughCount = 4;
+        SessionEntity b = new SessionEntity("b");
+        b.actuationCount = 2;
         BaselineCalculator.Baseline base = new BaselineCalculator().compute(Arrays.asList(a, b));
-        assertEquals(10f, base.avgPeakPressure, 0.001f);
-        assertEquals(2000f, base.avgInhaleDurationMillis, 0.001f);
+        assertEquals(2f, base.avgCoughPerSession, 0.001f);
+        assertEquals(1f, base.avgActuationPerSession, 0.001f);
     }
 
     @Test
-    public void alerts_noPressureAlertWhenNothingMeasured() {
-        BaselineCalculator.Baseline b = new BaselineCalculator.Baseline();
-        b.avgPeakPressure = 10f;
-        b.avgInhaleDurationMillis = 2000f;
-        List<AlertEngine.Alert> alerts = new AlertEngine().evaluate(b, -1, 0, 0f, 0f, 0, 0);
+    public void alerts_noneWhenNothingMeasured() {
+        List<AlertEngine.Alert> alerts = new AlertEngine().evaluate(
+                new BaselineCalculator.Baseline(), -1, 0, 0, 0);
         assertTrue(alerts.isEmpty());
     }
 }

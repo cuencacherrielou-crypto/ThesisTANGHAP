@@ -45,7 +45,7 @@ public class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.ViewHold
         SessionEntity session = sessions.get(position);
         holder.tvDate.setText(sdf.format(new Date(session.startTimeMillis)));
         
-        // Breathing pattern and coughs only: breathing-rate and inhalation-effort values are hidden for now
+        // Breathing pattern (a label from the breathing sounds, never a number) and coughs
         String pattern = session.detectedPattern != null ? session.detectedPattern : "Breathing not measured";
         holder.tvSummary.setText(pattern + " | " + session.coughCount + (session.coughCount == 1 ? " cough" : " coughs"));
         

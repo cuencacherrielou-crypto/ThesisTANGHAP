@@ -52,8 +52,7 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:padding="16dp">
-                    <!-- Breathing pattern from the breathing sounds: a label only, no numbers
-                         (inhalation effort and breathing-rate values are hidden for now) -->
+                    <!-- Breathing pattern from the breathing sounds: a label only, no numbers -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"

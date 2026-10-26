@@ -23,12 +23,17 @@ public class SessionEvent {
         WHEEZE,
         /** Inhaler canister pressed (hall sensor). */
         ACTUATION,
-        /** One inhalation; value = duration in ms, label = peak effort in kPa. */
+        /**
+         * Older sessions only (the air pressure sensor was removed): one inhalation measured by it;
+         * value = duration in ms, label = peak effort in kPa. Kept so those saved sessions still load.
+         */
         INHALATION,
-        /** Breathing rate measured over the last 30 s; value = BPM. */
+        /** Older sessions only (from the removed air pressure sensor): breathing rate; value = BPM. */
         BREATHING_RATE,
-        /** Pressure packets lost in transmission; value = number of packets. */
+        /** Older sessions only (from the removed air pressure sensor): packets lost; value = number of packets. */
         DATA_GAP,
+        /** Microphone audio lost over Bluetooth and filled in; value = ms lost. */
+        AUDIO_GAP,
         /**
          * Older sessions only (the nearby-cough filter was removed): a quieter cough that was not
          * counted. Kept so those saved sessions still load. Label = cough type, value = confidence %.
@@ -84,6 +89,8 @@ public class SessionEvent {
             case DATA_GAP:
                 int lost = Math.round(value);
                 return "Sensor data gap: " + lost + (lost == 1 ? " packet" : " packets") + " lost";
+            case AUDIO_GAP:
+                return "Audio gap: " + Math.round(value) + " ms lost over Bluetooth (filled in)";
             case COUGH_IGNORED:
                 return "Not counted, likely someone nearby (quieter cough): " + label
                         + " (" + Math.round(value) + "% confidence)";

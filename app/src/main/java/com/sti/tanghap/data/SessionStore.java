@@ -43,8 +43,7 @@ public final class SessionStore {
     }
 
     /**
-     * This session's coughs against the previous 7 days. Inhalation effort is not compared for
-     * now: the pressure sensor is not reliable yet, so its values are not shown.
+     * This session's coughs against the previous 7 days.
      */
     public static String baselineText(SessionEntity session, BaselineCalculator.Baseline baseline) {
         if (baseline.sessions == 0) {

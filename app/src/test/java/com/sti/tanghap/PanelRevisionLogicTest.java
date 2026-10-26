@@ -8,7 +8,6 @@ import com.sti.tanghap.ai.AssessmentEngine;
 import com.sti.tanghap.ai.BreathingAnalyzer;
 import com.sti.tanghap.ai.CoughClass;
 import com.sti.tanghap.domain.DoseReminder;
-import com.sti.tanghap.domain.InhalationTracker;
 
 import org.junit.Test;
 
@@ -54,39 +53,6 @@ public class PanelRevisionLogicTest {
         // with breathlessness (rapid breathing) as well: a possible flare-up
         assertEquals(AssessmentEngine.CATEGORY_COPD, new AssessmentEngine().generatePreliminaryAssessment(
                 bpm(22), CoughClass.PERSISTENT_COUGH, false, true, false).possibleCondition);
-    }
-
-    // ---------- Inhalation duration ----------
-
-    @Test
-    public void tracker_measuresInhalationLength() {
-        InhalationTracker t = new InhalationTracker();
-        // 10 samples per packet, one packet every 100 ms -> 10 ms per sample
-        float[] quiet = new float[10];
-        float[] inhale = new float[10];
-        // suction shows as negative pressure; a real reading wavers (a frozen value is a glitch)
-        for (int i = 0; i < 10; i++) inhale[i] = (i % 2 == 0) ? -3.0f : -2.9f;
-
-        long time = 0;
-        t.addSamples(quiet, time += 100);
-        for (int p = 0; p < 20; p++) t.addSamples(inhale, time += 100);   // 200 samples = 2.0 s
-        t.addSamples(quiet, time += 100);
-        t.addSamples(quiet, time += 100);
-        t.finish();
-
-        assertEquals(1, t.getInhalationCount());
-        assertEquals(2000, t.getAverageInhaleMillis());
-        assertEquals(3.0f, t.getPeakEffortKpa(), 0.001f);
-    }
-
-    @Test
-    public void tracker_ignoresSingleSampleSpikes() {
-        InhalationTracker t = new InhalationTracker();
-        t.addSamples(new float[]{0f, 4f, 0f, 0f}, 100);
-        t.addSamples(new float[]{0f, 0f, 0f, 0f}, 200);
-        t.finish();
-        assertEquals(0, t.getInhalationCount());
-        assertEquals(0, t.getAverageInhaleMillis());
     }
 
     // ---------- Missed / late doses ----------

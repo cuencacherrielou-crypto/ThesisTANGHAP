@@ -246,7 +246,7 @@ public class LiveSessionActivity extends AppCompatActivity implements Monitoring
 
     @Override
     public void onUpdate(MonitoringSession.Snapshot s) {
-        // Breathing pattern from the breathing sounds; its rate and the inhalation effort are not shown
+        // Breathing pattern from the breathing sounds; its estimated rate is not shown
         tvBreathingPattern.setText(s.pattern);
         tvBreathingHint.setText(s.breathingInsight);
         tvLiveActuations.setText(s.actuations + (s.actuations == 1 ? " Actuation" : " Actuations"));

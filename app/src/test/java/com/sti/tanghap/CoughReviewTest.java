@@ -100,15 +100,15 @@ public class CoughReviewTest {
         s.synced = true;
         List<SessionEvent> events = new ArrayList<>(Arrays.asList(
                 new SessionEvent(1_000, SessionEvent.Type.COUGH, 80, CoughClass.DRY_COUGH.label),
-                new SessionEvent(2_000, SessionEvent.Type.COUGH, 90, CoughClass.SEVERE_COUGH.label)));
+                new SessionEvent(2_000, SessionEvent.Type.COUGH, 90, CoughClass.WET_COUGH.label)));
         CoughReview.applyTo(s, events, ADULT, Collections.emptyList(), Collections.emptyList());
         assertEquals(2, s.coughCount);
-        // One severe-sounding cough (the type heard last of a tie): no OTC medicine, not the hospital
+        // A tie goes to the type heard last: wet, so no cough suppressant
         assertEquals(AssessmentEngine.CATEGORY_STANDARD, s.possibleCondition);
         assertFalse(s.riskLevelHigh);
         assertFalse(s.otcRecommendation.contains("Dextromethorphan"));
 
-        // The user says the severe cough was someone else's
+        // The user says the wet cough was someone else's
         events.set(1, events.get(1).withType(SessionEvent.Type.COUGH_REMOVED));
         CoughReview.applyTo(s, events, ADULT, Collections.emptyList(), Collections.emptyList());
         assertEquals(1, s.coughCount);

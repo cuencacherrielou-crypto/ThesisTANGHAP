@@ -19,8 +19,6 @@ public final class CoughEvidence {
 
     /** A productive (wet) cough: at least this many wet-sounding coughs, and at least half of the coughs. */
     public static final int PRODUCTIVE_MIN_WET = 3;
-    /** Repeated severe coughing: at least this many severe-sounding coughs, and at least a third of the coughs. */
-    public static final int SEVERE_MIN = 2;
     /** Wheezing heard repeatedly in the session: this many confirmed wheezes (each already heard twice). */
     public static final int WHEEZE_MIN = 2;
     /** Acute bronchitis: a cough that has lasted more than 5 days (AAFP, Kinkade & Long 2016). */
@@ -41,6 +39,8 @@ public final class CoughEvidence {
     public int wheezes;
     /** Coughing on and off for 3 weeks or more (CoughHistory). */
     public boolean persistent;
+    /** A cough lasting 2 weeks or more with coughing fits (CoughHistory, CDC criteria). */
+    public boolean severe;
     /** Coughing a lot for an hour, or 3 or more episodes in 24 hours (CoughHistory). */
     public boolean continuous;
     /** Days from the first to the last coughing day of the current spell (CoughHistory). */
@@ -56,8 +56,10 @@ public final class CoughEvidence {
     public static CoughEvidence single(CoughClass c) {
         CoughEvidence e = new CoughEvidence();
         if (c == null) return e;
-        if (c == CoughClass.PERSISTENT_COUGH) {
-            e.persistent = true;
+        if (c == CoughClass.PERSISTENT_COUGH || c == CoughClass.SEVERE_COUGH) {
+            // both stand for a cough history, not for one sound
+            e.persistent = c == CoughClass.PERSISTENT_COUGH;
+            e.severe = c == CoughClass.SEVERE_COUGH;
             e.add(CoughClass.DRY_COUGH, 0);
         } else if (c != CoughClass.NON_COUGH) {
             e.add(c, 0);
@@ -87,6 +89,7 @@ public final class CoughEvidence {
         e.history = CoughHistory.evaluate(coughTimes, nowMillis, zone);
         if (e.coughs > 0) {   // earlier coughing alone says nothing about this session
             e.persistent = e.history.persistent;
+            e.severe = e.history.severe;
             e.continuous = e.history.continuous;
             e.coughSpellDays = e.history.spellDays;
         }
@@ -116,10 +119,13 @@ public final class CoughEvidence {
         return n == 0 ? 0 : Math.round(percentSum[c.ordinal()] / (float) n);
     }
 
-    /** The most frequent cough type (dry, wet or severe); a tie goes to the type heard last. Null without coughs. */
+    /**
+     * The most frequent cough type, dry or wet; a tie goes to the type heard last. Null without dry
+     * or wet coughs (coughs saved as "severe" by older builds have no dry / wet type).
+     */
     public CoughClass mainCoughType() {
         CoughClass best = null;
-        for (CoughClass c : new CoughClass[]{CoughClass.DRY_COUGH, CoughClass.WET_COUGH, CoughClass.SEVERE_COUGH}) {
+        for (CoughClass c : new CoughClass[]{CoughClass.DRY_COUGH, CoughClass.WET_COUGH}) {
             if (count(c) == 0) continue;
             if (best == null || count(c) > count(best)
                     || (count(c) == count(best) && lastIndex[c.ordinal()] > lastIndex[best.ordinal()])) {
@@ -133,12 +139,6 @@ public final class CoughEvidence {
     public boolean productive() {
         int wet = count(CoughClass.WET_COUGH);
         return wet >= PRODUCTIVE_MIN_WET && 2 * wet >= coughs;
-    }
-
-    /** Severe-sounding coughs are repeated and at least a third of the coughs. */
-    public boolean repeatedSevere() {
-        int severe = count(CoughClass.SEVERE_COUGH);
-        return severe >= SEVERE_MIN && 3 * severe >= coughs;
     }
 
     public boolean repeatedWheeze() {

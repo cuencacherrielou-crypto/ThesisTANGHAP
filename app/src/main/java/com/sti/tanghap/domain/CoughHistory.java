@@ -27,6 +27,13 @@ import java.util.concurrent.TimeUnit;
  *   <li><b>Continuous cough</b> (NHS definition): coughing a lot for more than an hour, or 3 or
  *   more coughing episodes in 24 hours. Coughs less than {@link #EPISODE_GAP_MS} apart are one
  *   episode.</li>
+ *   <li><b>Severe cough</b> (CDC 2020 pertussis clinical criteria: a cough illness lasting 2 weeks
+ *   or more with paroxysms of coughing): the current spell spans at least {@link #SEVERE_DAYS}
+ *   days AND a coughing fit was recorded during it. A coughing fit (paroxysm) is many coughs in a
+ *   row without a breath in between; on the device: at least {@link #FIT_MIN_COUGHS} coughs, each
+ *   less than {@link #FIT_GAP_MS} after the one before. The other CDC signs (whoop, vomiting after
+ *   coughing, pauses in breathing) cannot be heard reliably, so they are not used. The sound model's
+ *   "severe" class is not used: on held-out recordings only 31% of its severe calls were severe.</li>
  * </ul>
  */
 public final class CoughHistory {
@@ -37,6 +44,9 @@ public final class CoughHistory {
     public static final long EPISODE_GAP_MS = TimeUnit.MINUTES.toMillis(15);
     public static final int CONTINUOUS_EPISODES = 3;
     public static final long LONG_EPISODE_MS = TimeUnit.HOURS.toMillis(1);
+    public static final int SEVERE_DAYS = 14;
+    public static final int FIT_MIN_COUGHS = 5;
+    public static final long FIT_GAP_MS = 2000;
     /** How far back sessions are read; longer than any spell that still counts as one. */
     public static final long LOOKBACK_MS = TimeUnit.DAYS.toMillis(120);
 
@@ -47,13 +57,20 @@ public final class CoughHistory {
         public final int coughingDays;
         public final boolean continuous;
         public final int episodesLast24h;
+        /** Coughing fits recorded during the current spell. */
+        public final int fitsInSpell;
+        /** A cough lasting {@link #SEVERE_DAYS} days or more with coughing fits. */
+        public final boolean severe;
 
-        Result(boolean persistent, int spellDays, int coughingDays, boolean continuous, int episodesLast24h) {
+        Result(boolean persistent, int spellDays, int coughingDays, boolean continuous, int episodesLast24h,
+               int fitsInSpell, boolean severe) {
             this.persistent = persistent;
             this.spellDays = spellDays;
             this.coughingDays = coughingDays;
             this.continuous = continuous;
             this.episodesLast24h = episodesLast24h;
+            this.fitsInSpell = fitsInSpell;
+            this.severe = severe;
         }
     }
 
@@ -77,6 +94,7 @@ public final class CoughHistory {
         }
         int spellDays = 0;
         int spellCount = 0;
+        LocalDate spellFirst = null;
         LocalDate today = day(nowMillis, zone);
         if (!coughingDays.isEmpty()) {
             LocalDate last = coughingDays.get(coughingDays.size() - 1);
@@ -90,6 +108,7 @@ public final class CoughHistory {
                     spellCount++;
                 }
                 spellDays = (int) ChronoUnit.DAYS.between(first, last);
+                spellFirst = first;
             }
         }
         boolean persistent = spellDays >= PERSISTENT_DAYS;
@@ -108,7 +127,21 @@ public final class CoughHistory {
             previous = t;
         }
         boolean continuous = episodes >= CONTINUOUS_EPISODES || longEpisode;
-        return new Result(persistent, spellDays, spellCount, continuous, episodes);
+
+        // ---- severe: coughing fits during a spell of 2 weeks or more
+        int fits = 0;
+        if (spellFirst != null) {
+            int run = 0;
+            long prev = Long.MIN_VALUE;
+            for (long t : times) {
+                if (day(t, zone).isBefore(spellFirst)) continue;
+                run = prev != Long.MIN_VALUE && t - prev < FIT_GAP_MS ? run + 1 : 1;
+                if (run == FIT_MIN_COUGHS) fits++;   // counted once per fit, however long it goes on
+                prev = t;
+            }
+        }
+        boolean severe = spellDays >= SEVERE_DAYS && fits > 0;
+        return new Result(persistent, spellDays, spellCount, continuous, episodes, fits, severe);
     }
 
     /** Times of the counted coughs in a saved session's event log. */

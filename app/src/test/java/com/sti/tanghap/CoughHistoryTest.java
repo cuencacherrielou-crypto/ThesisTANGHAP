@@ -167,12 +167,102 @@ public class CoughHistoryTest {
     }
 
     @Test
-    public void severeCough_staysSevere_evenWithAPersistentHistory() {
-        CoughReview.Outcome o = CoughReview.evaluate(todaysCoughs(CoughClass.SEVERE_COUGH), 26, ADULT,
-                coughingOn(0, 6, 12, 18), Collections.emptyList(), at(21, 30), ZONE);
+    public void severeSoundingCoughs_areNotASevereCough() {
+        // Coughs an older build saved as "severe", with no coughing fit and no 2-week history
+        CoughReview.Outcome o = CoughReview.evaluate(todaysCoughs(CoughClass.SEVERE_COUGH), 16, ADULT,
+                Collections.emptyList(), Collections.emptyList(), at(21, 30), ZONE);
+        assertFalse(o.severeFromHistory);
+        assertEquals(CoughReview.UNTYPED_COUGH_FINDING, o.findingText());
+        assertFalse(o.assessment.recommendClinic);
+    }
+
+    // ---------- severe: coughing fits during a cough of 2 weeks or more (CDC pertussis criteria) ----------
+
+    /** {@code n} coughs in a row starting at (day, minute), {@code gapMs} apart. */
+    private static List<SessionEvent> fit(int day, int minute, int n, long gapMs) {
+        List<SessionEvent> out = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            out.add(new SessionEvent(at(day, minute) + i * gapMs, SessionEvent.Type.COUGH, 80, CoughClass.DRY_COUGH.label));
+        }
+        return out;
+    }
+
+    @Test
+    public void coughingFitDuringATwoWeekCough_isSevere() {
+        CoughReview.Outcome o = CoughReview.evaluate(fit(14, 0, 5, 800), 16, ADULT,
+                coughingOn(0, 7), Collections.emptyList(), at(14, 5), ZONE);
+        assertTrue(o.history.severe);
+        assertEquals(1, o.history.fitsInSpell);
+        assertTrue(o.severeFromHistory);
+        assertEquals(CoughClass.SEVERE_COUGH, o.finding);
+        assertEquals("Severe cough (coughing fits, coughing on and off for 14 days)", o.findingText());
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, o.assessment.possibleCondition);
+        assertTrue(o.assessment.recommendClinic);
+        assertFalse(o.assessment.recommendHospital);
+        assertEquals(OtcGuidance.SEEK_CARE, o.assessment.medicineKey);   // no OTC medicine
+        assertTrue(o.assessment.observations.contains(AssessmentEngine.SEVERE_OBSERVATION));
+    }
+
+    @Test
+    public void coughingFitWithoutTwoWeeksOfCoughing_isNotSevere() {
+        CoughReview.Outcome o = CoughReview.evaluate(fit(14, 0, 8, 800), 16, ADULT,
+                coughingOn(4, 9), Collections.emptyList(), at(14, 5), ZONE);   // a 10-day cough
+        assertTrue(o.history.fitsInSpell > 0);
+        assertFalse(o.severeFromHistory);
+        assertEquals(CoughClass.DRY_COUGH, o.finding);
+    }
+
+    @Test
+    public void twoWeeksOfCoughingWithoutAFit_isNotSevere() {
+        // 5 coughs, but 3 s apart: separate coughs, not a fit
+        CoughReview.Outcome o = CoughReview.evaluate(fit(14, 0, 5, 3000), 16, ADULT,
+                coughingOn(0, 7), Collections.emptyList(), at(14, 5), ZONE);
+        assertEquals(0, o.history.fitsInSpell);
+        assertFalse(o.severeFromHistory);
+    }
+
+    @Test
+    public void fourCoughsInARow_areNotYetAFit() {
+        CoughReview.Outcome o = CoughReview.evaluate(fit(14, 0, 4, 800), 16, ADULT,
+                coughingOn(0, 7), Collections.emptyList(), at(14, 5), ZONE);
+        assertFalse(o.severeFromHistory);
+    }
+
+    @Test
+    public void aFitInAnEarlierSessionOfTheSpell_counts() {
+        List<Long> prior = coughingOn(0, 7, 14);
+        for (SessionEvent e : fit(7, 30, 6, 600)) prior.add(e.timeMillis);
+        CoughReview.Outcome o = CoughReview.evaluate(todaysCoughs(CoughClass.DRY_COUGH), 16, ADULT,
+                prior, Collections.emptyList(), at(21, 30), ZONE);
+        assertTrue(o.severeFromHistory);
+    }
+
+    @Test
+    public void aFitBeforeTheSpellBegan_doesNotCount() {
+        List<Long> prior = new ArrayList<>();
+        for (SessionEvent e : fit(0, 0, 6, 600)) prior.add(e.timeMillis);   // a fit, then 20 days without coughing
+        prior.addAll(coughingOn(20, 27));
+        CoughReview.Outcome o = CoughReview.evaluate(todaysCoughs(CoughClass.DRY_COUGH), 16, ADULT,
+                prior, Collections.emptyList(), at(34, 30), ZONE);
+        assertFalse(o.severeFromHistory);
+    }
+
+    @Test
+    public void severeOutranksPersistent() {
+        CoughReview.Outcome o = CoughReview.evaluate(fit(21, 0, 5, 800), 16, ADULT,
+                coughingOn(0, 6, 12, 18), Collections.emptyList(), at(21, 5), ZONE);
+        assertTrue(o.history.persistent);
+        assertTrue(o.severeFromHistory);
         assertFalse(o.persistentFromHistory);
         assertEquals(CoughClass.SEVERE_COUGH, o.finding);
+    }
+
+    @Test
+    public void severeCoughWithFastBreathing_isStillPneumoniaLike() {
+        CoughReview.Outcome o = CoughReview.evaluate(fit(14, 0, 5, 800), 26, ADULT,
+                coughingOn(0, 7), Collections.emptyList(), at(14, 5), ZONE);
         assertEquals(AssessmentEngine.CATEGORY_PNEUMONIA, o.assessment.possibleCondition);
+        assertTrue(o.assessment.recommendHospital);
     }
 
     @Test

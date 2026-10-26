@@ -146,10 +146,9 @@ public class AlertsActivity extends AppCompatActivity {
                 ));
             }
 
-            // Inhalation effort (pressure) alerts are off for now: the pressure sensor is not
-            // reliable yet, so its strength and duration are not used or shown (0 = not recorded)
+            // Breathing pattern, cough and inhaler-press trends
             alerts.addAll(new AlertEngine().evaluate(
-                    baseline, userAge, todayBpm, 0f, 0f, todayCough, todayAct
+                    baseline, userAge, todayBpm, todayCough, todayAct
             ));
 
             // Late or missed inhaler doses

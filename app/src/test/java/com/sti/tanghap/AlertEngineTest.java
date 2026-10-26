@@ -12,16 +12,12 @@ public class AlertEngineTest {
         BaselineCalculator.Baseline b = new BaselineCalculator.Baseline();
         b.avgCoughPerSession = 2f;
         b.avgActuationPerSession = 1f;
-        b.avgInhaleDurationMillis = 3000f;
-        b.avgPeakPressure = 15f;
         
         // Added age=25 and bpm=16 (normal for adult) to match new signature
         List<AlertEngine.Alert> alerts = new AlertEngine().evaluate(
                 b,
                 25,    // userAge
                 16,    // todayBpm
-                15f,   // todayPeakPressure
-                3000f, // todayInhaleDurationMillis
                 10,    // todayCoughCount
                 1      // todayActuationCount
         );
@@ -38,7 +34,7 @@ public class AlertEngineTest {
         BaselineCalculator.Baseline b = new BaselineCalculator.Baseline();
         // 25 year old adult, normal is 12-20. 25 is high.
         List<AlertEngine.Alert> alerts = new AlertEngine().evaluate(
-                b, 25, 25, 15f, 3000f, 0, 0
+                b, 25, 25, 0, 0
         );
         boolean found = false;
         for (AlertEngine.Alert a : alerts) {

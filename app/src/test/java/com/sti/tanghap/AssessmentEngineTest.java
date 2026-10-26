@@ -215,30 +215,33 @@ public class AssessmentEngineTest {
         assertEquals(AssessmentEngine.CATEGORY_ASTHMA, r.possibleCondition);
     }
 
-    // ---------- Severe cough: repeated, and a good part of the coughing ----------
+    // ---------- Severe cough: coughing fits AND a cough lasting 2 weeks (CDC), like persistent ----------
 
-    @Test
-    public void singleSevereCough_isNotEscalated() {
-        // 14:40:05 device session: one cough called severe
-        AssessmentResult r = assess(16, ev(0, 0, 1, 0), adult());
-        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.possibleCondition);
-        assertFalse(r.recommendClinic);
-        assertTrue(String.join(" ", r.observations).contains("single cough is not enough"));
+    /** A coughing fit: {@code n} coughs of one type, 0.8 s apart, ending at NOW. */
+    private static List<SessionEvent> fit(int n, CoughClass type) {
+        List<SessionEvent> out = new ArrayList<>();
+        for (int i = n - 1; i >= 0; i--) out.add(new SessionEvent(NOW - 800L * i, SessionEvent.Type.COUGH, 80, type.label));
+        return out;
+    }
+
+    private static CoughEvidence fitEv(int n, CoughClass type, List<Long> priorCoughs) {
+        return CoughEvidence.from(fit(n, type), priorCoughs, Collections.emptyList(), NOW, UTC);
     }
 
     @Test
-    public void oneSevereAmongWetCoughs_followsTheWetCoughs() {
-        // 14:50:45 device session: 4 wet + 1 severe
-        AssessmentResult r = assess(16, ev(0, 4, 1, 0), adult());
+    public void severeSoundingCoughs_areNotASevereCough() {
+        // 14:40:05 / 14:50:45 device sessions: coughs the model called severe
+        AssessmentResult r = assess(16, ev(0, 4, 3, 0), adult());
         assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.possibleCondition);
         assertFalse(r.recommendClinic);
         assertEquals(OtcGuidance.WET_COUGH, r.medicineKey);
     }
 
     @Test
-    public void repeatedSevereCoughs_areCheckedByADoctor_noMedicine() {
-        AssessmentResult r = assess(16, ev(1, 0, 3, 0), adult());
+    public void coughingFitsDuringATwoWeekCough_areASevereCough_doctor_noMedicine() {
+        AssessmentResult r = assess(16, fitEv(5, CoughClass.DRY_COUGH, coughedDaysAgo(14, 7)), adult());
         assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.possibleCondition);
+        assertTrue(r.observations.contains(AssessmentEngine.SEVERE_OBSERVATION));
         assertTrue(r.recommendClinic);
         assertFalse(r.recommendHospital);
         assertEquals(OtcGuidance.SEEK_CARE, r.medicineKey);
@@ -246,10 +249,18 @@ public class AssessmentEngineTest {
     }
 
     @Test
-    public void twoSevereAmongManyCoughs_areNotRepeatedSevere() {
-        AssessmentResult r = assess(16, ev(6, 0, 2, 0), adult());
+    public void coughingFitsToday_areNotASevereCough() {
+        AssessmentResult r = assess(16, fitEv(8, CoughClass.DRY_COUGH, Collections.emptyList()), adult());
         assertFalse(r.recommendClinic);
         assertEquals(OtcGuidance.DRY_COUGH, r.medicineKey);
+    }
+
+    @Test
+    public void severeWetCough_isADoctorCheck_notBronchitis() {
+        // A productive cough lasting days, but with coughing fits for 2 weeks: checked as severe
+        AssessmentResult r = assess(16, fitEv(5, CoughClass.WET_COUGH, coughedDaysAgo(14, 7)), adult());
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.possibleCondition);
+        assertEquals(OtcGuidance.SEEK_CARE, r.medicineKey);
     }
 
     // ---------- Pneumonia-like: repeated coughing AND surely fast breathing (WHO IMCI) ----------
@@ -326,8 +337,8 @@ public class AssessmentEngineTest {
     }
 
     @Test
-    public void copdWithRepeatedSevereAndWetCoughs_isAFlare() {
-        AssessmentResult r = assess(16, ev(0, 3, 3, 0), withCopd());
+    public void copdWithSevereCoughAndPhlegm_isAFlare() {
+        AssessmentResult r = assess(16, fitEv(5, CoughClass.WET_COUGH, coughedDaysAgo(14, 7)), withCopd());
         assertEquals(AssessmentEngine.CATEGORY_COPD, r.possibleCondition);
     }
 

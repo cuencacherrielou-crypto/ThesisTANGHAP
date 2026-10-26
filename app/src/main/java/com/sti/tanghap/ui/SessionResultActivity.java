@@ -149,7 +149,7 @@ public class SessionResultActivity extends AppCompatActivity {
             SessionEntity session = dao.getByIdForUser(id, uid);
 
             if (session != null) {
-                // Always rebuilt, so older sessions' saved inhalation-effort comparison is not shown
+                // Always rebuilt, so older sessions' saved air-pressure comparison is not shown
                 session.baselineComparison = SessionStore.baselineText(session, SessionStore.baselineFor(dao, session));
                 runOnUiThread(() -> showSession(session));
             } else {
@@ -179,7 +179,7 @@ public class SessionResultActivity extends AppCompatActivity {
 
         // Dynamic UI render for Actuations Count
         tvAct.setText(String.valueOf(session.actuationCount));
-        // Breathing pattern from the breathing sounds; the rate and inhalation effort are not shown
+        // Breathing pattern from the breathing sounds; its estimated rate is not shown
         tvBreathingPattern.setText(session.detectedPattern != null ? session.detectedPattern : "--");
     }
 
@@ -267,13 +267,10 @@ public class SessionResultActivity extends AppCompatActivity {
     private void displayTimeline(SessionEntity session) {
         List<SessionEvent> events = SessionEvent.decode(session.eventLog);
 
-        // Summary: data quality (breathing-rate and inhalation values are not shown for now)
+        // Summary: data quality
         StringBuilder summary = new StringBuilder();
-        if (session.droppedPackets > 0) {
-            summary.append("Data quality: ").append(session.droppedPackets)
-                    .append(session.droppedPackets == 1 ? " sensor packet was" : " sensor packets were")
-                    .append(" lost over Bluetooth; readings may be slightly incomplete.");
-        }
+        String quality = SessionTimeline.dataQualitySummary(session.droppedPackets, events);
+        if (quality != null) summary.append(quality);
         if (summary.length() == 0) {
             summary.append(events.isEmpty()
                     ? "This session was recorded before time-stamped readings were added."
@@ -289,7 +286,7 @@ public class SessionResultActivity extends AppCompatActivity {
         SimpleDateFormat clock = new SimpleDateFormat("hh:mm:ss a", Locale.getDefault());
         for (int i = 0; i < events.size(); i++) {
             SessionEvent e = events.get(i);
-            if (e.type == SessionEvent.Type.BREATHING_RATE || e.type == SessionEvent.Type.INHALATION) continue;
+            if (!SessionTimeline.isKeyEvent(e)) continue;
             hasCoughs |= e.isCoughEntry();
             timelineContainer.addView(timelineRow(clock.format(new Date(e.timeMillis)) + "  " + e.describe(),
                     canReview && e.isCoughEntry() ? i : -1, e));

@@ -44,11 +44,6 @@
     <string name="not_paired_caps">NOT PAIRED</string>
     <string name="bullet_separator">" • "</string>
     <string name="battery_unknown">Device battery level not reported yet</string>
-    <string name="inhale_waiting">Waiting for an inhalation</string>
-    <string name="inhale_now">Inhaling… %1$.1f s</string>
-    <string name="inhale_none_yet">No inhalation measured yet</string>
-    <string name="inhale_last">Last inhalation: %1$.1f s, %2$.1f kPa · %3$d total</string>
-    <string name="sensor_glitch_warning">The pressure sensor sent an impossible reading (stuck or at its limit), so it was not counted. Check the device\'s pressure sensor connection.</string>
     <string name="battery_desc_full">Device battery full</string>
     <string name="battery_desc_half">Device battery about half</string>
     <string name="battery_desc_low">Device battery low</string>
@@ -88,9 +83,9 @@
     <string name="about_tanghap">About TANGHAP</string>
     <string name="app_version">Version 1.0.0</string>
     <string name="what_is_tanghap">What is TANGHAP?</string>
-    <string name="tanghap_description">TANGHAP (Intelligent Inhaler Monitoring) works with a smart inhaler attachment to track your breathing rate, inhalation effort, inhaler use and coughs. An on-device AI model classifies cough sounds, and the app gives a preliminary, non-diagnostic assessment to help you and your doctor follow your respiratory condition over time.</string>
+    <string name="tanghap_description">TANGHAP (Intelligent Inhaler Monitoring) works with a smart inhaler attachment to track your breathing pattern, inhaler use and coughs. An on-device AI model classifies cough and wheezing sounds, the breathing pattern is judged from breathing sounds, and the app gives a preliminary, non-diagnostic assessment to help you and your doctor follow your respiratory condition over time.</string>
     <string name="key_features">Key Features</string>
-    <string name="features_list">• Live breathing rate and inhalation pressure monitoring\n• On-device AI cough classification (dry, wet, persistent, severe, wheezing)\n• Preliminary assessment worded as a possibility, never a diagnosis\n• Matching over-the-counter medicine guidance (recommendation only)\n• Inhaler press tracking and dose reminders\n• Monitoring continues in the background\n• Time-stamped history, daily summaries and trends\n• Alerts, emergency contact and nearby hospitals\n• PDF report for your doctor</string>
+    <string name="features_list">• Live breathing pattern (normal, rapid or slow) from breathing sounds\n• On-device AI cough and wheezing detection (dry or wet cough; persistent and severe cough from cough history)\n• Preliminary assessment worded as a possibility, never a diagnosis\n• Matching over-the-counter medicine guidance (recommendation only)\n• Inhaler press tracking and dose reminders\n• Monitoring continues in the background\n• Time-stamped history, daily summaries and trends\n• Alerts, emergency contact and nearby hospitals\n• PDF report for your doctor</string>
     <string name="copyright">© 2026 TANGHAP Project Team\nDeveloped for Academic Research</string>
 
     <!-- Change Password Strings -->
@@ -151,7 +146,6 @@
 
     <!-- Chart Labels -->
     <string name="label_breathing">Breathing</string>
-    <string name="label_inhalation_effort">Inhalation Effort</string>
     <string name="label_cough_intensity">Cough Intensity</string>
     <string name="label_actuations">Actuations</string>
     <string name="initializing_sensor">Initializing sensor…</string>

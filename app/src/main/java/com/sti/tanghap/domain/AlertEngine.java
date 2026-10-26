@@ -20,8 +20,6 @@ public class AlertEngine {
             BaselineCalculator.Baseline baseline,
             int userAge,
             int todayBpm,
-            float todayPeakPressure,
-            float todayInhaleDurationMillis,
             int todayCoughCount,
             int todayActuationCount
     ) {
@@ -58,30 +56,6 @@ public class AlertEngine {
                     "Frequent inhaler actuation",
                     "Actuation count is above your recent baseline. This is not a diagnosis. If frequent use continues, consider discussing with a healthcare provider.",
                     "WARN"
-            ));
-        }
-
-        if (baseline.avgInhaleDurationMillis > 0 && todayInhaleDurationMillis > 0
-                && todayInhaleDurationMillis < baseline.avgInhaleDurationMillis * 0.7f) {
-            out.add(new Alert(
-                    "Shorter inhalation duration",
-                    "Your inhalations were shorter than usual. This can happen when breathing in is harder "
-                            + "(for example when the airways are narrowed) or when inhaler technique changes. "
-                            + "This is a trend indicator only, not a diagnosis.",
-                    "INFO"
-            ));
-        }
-
-        // Optional pressure deviation info (0 = no pressure recorded, not a weak inhalation)
-        if (baseline.avgPeakPressure > 0 && todayPeakPressure > 0
-                && todayPeakPressure < baseline.avgPeakPressure * 0.7f) {
-            out.add(new Alert(
-                    "Weaker inhalation than usual",
-                    "Your strongest inhalation was more than 30% weaker than your recent baseline. A weaker "
-                            + "inhalation can be a sign that the airways are narrowed, and it can also come from a "
-                            + "change in inhaler technique. If you also feel short of breath, wheeze or have chest "
-                            + "tightness, contact a healthcare provider. Trend indicator only, not a diagnosis.",
-                    "INFO"
             ));
         }
 

@@ -111,8 +111,7 @@
                         android:columnCount="2"
                         android:rowCount="2">
 
-                        <!-- Breathing pattern from the breathing sounds, as a label only (breathing-rate
-                             and inhalation-effort values are hidden for now) -->
+                        <!-- Breathing pattern from the breathing sounds, as a label only (no rate) -->
                         <LinearLayout android:layout_width="0dp" android:layout_columnWeight="1" android:layout_columnSpan="2" android:orientation="vertical" android:layout_marginBottom="24dp">
                             <TextView android:text="Breathing Pattern" android:textSize="13sp" android:textColor="@color/text_low_emphasis" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
                             <TextView android:id="@+id/tvBreathingPattern" android:text="--" android:textSize="20sp" android:textStyle="bold" android:textColor="@color/text_high_emphasis" android:layout_width="wrap_content" android:layout_height="wrap_content"/>

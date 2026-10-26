@@ -124,9 +124,12 @@ public class AiCoughClassifier implements Closeable {
             return type.isCough && coughProbability() >= MIN_CONFIDENCE;
         }
 
-        /** The cough's type: severe only at {@link #MIN_CONFIDENCE} or more, otherwise dry or wet. */
+        /**
+         * The cough's type: dry or wet, whichever is likelier. Never severe: on held-out recordings
+         * only 31% of the model's severe calls were severe at any threshold, so a severe cough is
+         * measured from the cough history instead (CoughHistory), as a persistent cough is.
+         */
         public CoughClass coughType() {
-            if (probabilities[CoughClass.SEVERE_COUGH.ordinal()] >= MIN_CONFIDENCE) return CoughClass.SEVERE_COUGH;
             return probabilities[CoughClass.WET_COUGH.ordinal()] > probabilities[CoughClass.DRY_COUGH.ordinal()]
                     ? CoughClass.WET_COUGH : CoughClass.DRY_COUGH;
         }

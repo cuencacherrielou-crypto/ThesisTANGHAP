@@ -141,7 +141,7 @@ public class DoctorExportActivity extends AppCompatActivity {
                     SessionEntity s = dao.getByIdForUser(sessionId, uid);
                     if (s != null) sessions.add(s);
                 }
-                // Rebuilt, so older sessions' saved inhalation-effort comparison is not reported
+                // Rebuilt, so older sessions' saved air-pressure comparison is not reported
                 for (SessionEntity s : sessions) {
                     s.baselineComparison = SessionStore.baselineText(s, SessionStore.baselineFor(dao, s));
                 }
@@ -414,8 +414,7 @@ public class DoctorExportActivity extends AppCompatActivity {
         canvas.drawText("Metrics:", MARGIN, y, paint);
         paint.setFakeBoldText(false);
         y += 25;
-        // Breathing as a pattern from the breathing sounds only; breathing-rate and inhalation-effort
-        // values are not reported for now
+        // Breathing as a pattern from the breathing sounds only; the estimated rate is not reported
         canvas.drawText("- Breathing Pattern (from breathing sounds): " + nonNull(session.detectedPattern), 70, y, paint);
         y += 25;
         canvas.drawText("- Cough Events: " + session.coughCount + (session.coughFinding != null ? " (" + session.coughFinding + ")" : ""), 70, y, paint);
@@ -423,7 +422,7 @@ public class DoctorExportActivity extends AppCompatActivity {
         canvas.drawText("- Actuations: " + session.actuationCount, 70, y, paint);
         if (session.droppedPackets > 0) {
             y += 25;
-            canvas.drawText("- Sensor packets lost over Bluetooth: " + session.droppedPackets, 70, y, paint);
+            canvas.drawText("- Bluetooth data gaps: " + session.droppedPackets, 70, y, paint);
         }
 
         SavedAssessment saved = SavedAssessment.of(session, HealthPrefs.loadProfile(this));
@@ -450,7 +449,7 @@ public class DoctorExportActivity extends AppCompatActivity {
         drawTimeline(session);
     }
 
-    /** Each key event with its time (breathing-rate and inhalation readings are not reported for now). */
+    /** Each key event with its time (see SessionTimeline.keyEvents). */
     private void drawTimeline(SessionEntity session) {
         List<SessionEvent> events = SessionEvent.decode(session.eventLog);
         if (events.isEmpty()) return;

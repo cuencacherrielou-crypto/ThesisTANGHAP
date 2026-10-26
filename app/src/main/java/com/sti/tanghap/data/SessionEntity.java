@@ -11,6 +11,7 @@ public class SessionEntity {
     public String userId; // Firebase Auth UID of the session owner
     public long startTimeMillis;
     public long endTimeMillis;
+    // Older sessions only (the air pressure sensor was removed); kept so saved sessions still load
     public float peakPressureKpa;
     public long inhaleDurationMillis;
     public int coughCount;
@@ -33,15 +34,15 @@ public class SessionEntity {
 
     public String recommendation;
 
-    // Down-sampled recorded pressure trace (comma-separated kPa values) for the result chart
+    // Older sessions only: down-sampled air pressure trace (comma-separated kPa values)
     public String pressureTrace;
 
     // ---- v4: time stamps and data quality ----
-    // Milliseconds from startTimeMillis for each pressureTrace point (comma-separated)
+    // Older sessions only: milliseconds from startTimeMillis for each pressureTrace point
     public String pressureTraceTimes;
-    // Time-stamped coughs, inhaler presses, breathing-rate readings, etc. (SessionEvent.encode)
+    // Time-stamped coughs, wheezes, inhaler presses, connection events, etc. (SessionEvent.encode)
     public String eventLog;
-    // Pressure packets lost in Bluetooth transmission during the session
+    // Bluetooth data gaps during the session: audio gaps (older sessions: lost air-pressure packets)
     public int droppedPackets;
     // Possible condition (AssessmentEngine.CATEGORY_*); never a diagnosis
     public String possibleCondition;

@@ -46,7 +46,6 @@ public class BleManager {
     private BluetoothLeScanner scanner;
     private BluetoothGatt gatt;
 
-    private BluetoothGattCharacteristic pressureChar;
     private BluetoothGattCharacteristic audioChar;
     private BluetoothGattCharacteristic actChar;
     private BluetoothGattCharacteristic batteryChar;
@@ -380,7 +379,6 @@ public class BleManager {
 
             Log.d(TAG, "TANGHAP service found.");
 
-            pressureChar = service.getCharacteristic(BleUuids.PRESSURE_STREAM_CHAR);
             audioChar = service.getCharacteristic(BleUuids.AUDIO_COMPRESSED_CHAR);
             if (audioChar == null) audioChar = service.getCharacteristic(BleUuids.AUDIO_STREAM_CHAR); // older firmware: raw PCM
             Log.d(TAG, "Audio stream: " + (audioChar == null ? "none"
@@ -467,19 +465,8 @@ public class BleManager {
 
         UUID uuid = c.getUuid();
 
-        // 1. PRESSURE DATA
-        if (BleUuids.PRESSURE_STREAM_CHAR.equals(uuid)) {
-            BlePacketParser.PressurePacket pkt = BlePacketParser.parsePressure(value);
-            if (pkt != null && pkt.kpaSamples != null) {
-                float[] arr = new float[pkt.kpaSamples.size()];
-                for (int i = 0; i < pkt.kpaSamples.size(); i++) {
-                    arr[i] = pkt.kpaSamples.get(i);
-                }
-                listener.onPressureSamples(pkt.sequence, arr);
-            }
-
-            // 2. INMP441 AUDIO STREAM DATA (AB04 compressed, or AB02 raw PCM from older firmware)
-        } else if (BleUuids.AUDIO_COMPRESSED_CHAR.equals(uuid)) {
+        // 1. INMP441 AUDIO STREAM DATA (AB04 compressed, or AB02 raw PCM from older firmware)
+        if (BleUuids.AUDIO_COMPRESSED_CHAR.equals(uuid)) {
             byte[] pcm = audioDecoder.decode(value);
             if (pcm == null) {
                 Log.w(TAG, "Corrupt audio packet ignored (" + (value == null ? 0 : value.length) + " bytes)");
@@ -491,6 +478,7 @@ public class BleManager {
                             "Audio lost: %d ms (filled); total %.1f%% of %d s",
                             gap / 16, 100.0 * lost / (lost + audioDecoder.getReceivedSamples()),
                             (lost + audioDecoder.getReceivedSamples()) / 16000));
+                    listener.onAudioGap(gap / 16);
                 }
                 listener.onAudioDataReceived(pcm);
             }
@@ -499,7 +487,7 @@ public class BleManager {
                 listener.onAudioDataReceived(value);
             }
 
-            // 3. HALL SENSOR / ACTUATION LOGIC
+            // 2. HALL SENSOR / ACTUATION LOGIC
         } else if (BleUuids.ACTUATION_EVENT_CHAR.equals(uuid)) {
             StringBuilder hex = new StringBuilder();
             if (value != null) for (byte b : value) hex.append(String.format("%02X ", b));
@@ -515,7 +503,7 @@ public class BleManager {
                 listener.onActuationEvent(currentPhoneTime);
             }
 
-            // 4. BATTERY
+            // 3. BATTERY
         } else if (BleUuids.BATTERY_CHAR.equals(uuid)) {
             Integer battery = BlePacketParser.parseBattery(value);
             listener.onBattery(battery);
@@ -530,7 +518,6 @@ public class BleManager {
     private void setupNotifications(BluetoothGatt g) {
         notifyQueue.clear();
 
-        if (pressureChar != null) notifyQueue.add(pressureChar);
         if (audioChar != null) notifyQueue.add(audioChar);
         if (actChar != null) notifyQueue.add(actChar);
         if (batteryChar != null) notifyQueue.add(batteryChar);

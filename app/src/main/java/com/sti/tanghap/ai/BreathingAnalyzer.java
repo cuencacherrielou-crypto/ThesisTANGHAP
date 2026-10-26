@@ -1,24 +1,12 @@
 package com.sti.tanghap.ai;
 
-import com.sti.tanghap.domain.InhalationTracker;
 import com.sti.tanghap.domain.RespiratoryNorms;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
- * AI-assisted breathing pattern analysis based on pressure sensor fluctuations.
+ * Breathing pattern (normal, rapid or slow) from the breathing sounds heard by the microphone
+ * ({@link BreathSoundAnalyzer}), judged against the normal breathing-rate range for the user's age.
  */
 public class BreathingAnalyzer {
-
-    /** Suction (kPa below rest; the device sends it as negative kPa) that counts as an inhalation. */
-    public static final float INHALATION_THRESHOLD_KPA = 0.3f;
-    /** Fewer breaths than this give no reliable rate, so no BPM is reported yet. */
-    public static final int MIN_BREATHS_FOR_RATE = 3;
-    /** With no breath for this long (or twice the usual spacing, if longer) the rate is stale. */
-    private static final float STALE_AFTER_SEC = 10f;
-    /** Two breaths closer than this are treated as one (caps detection at 60 BPM). */
-    private static final float MIN_BREATH_SPACING_SEC = 1.0f;
 
     public static class BreathingResult {
         public int bpm;
@@ -35,98 +23,8 @@ public class BreathingAnalyzer {
     }
 
     /**
-     * Analyzes pressure sensor data to compute breathing rate and pattern.
-     *
-     * @param pressureData Pressure values in kPa from the ESP32, in arrival order
-     * @param durationSec  Real time in seconds covered by {@code pressureData}
-     * @return BreathingResult containing BPM and insights
-     */
-    public BreathingResult analyze(float[] pressureData, float durationSec) {
-        return analyze(pressureData, durationSec, -1);
-    }
-
-    /** Same as {@link #analyze(float[], float)}, judging the rate against the user's age. */
-    public BreathingResult analyze(float[] pressureData, float durationSec, int ageYears) {
-        if (pressureData == null || pressureData.length < 3 || durationSec <= 0) {
-            return new BreathingResult(0, "Awaiting Inhalation...", "No pressure data available.", "Normal");
-        }
-        float sampleRateHz = pressureData.length / durationSec;
-        int minDistance = Math.max(1, Math.round(sampleRateHz * MIN_BREATH_SPACING_SEC));
-        List<Integer> starts = inhalationStarts(pressureData, minDistance);
-        int breaths = starts.size();
-
-        if (breaths == 0) {
-            return new BreathingResult(0, "Awaiting Inhalation...",
-                    "Inhale through the mouthpiece to measure breathing rate.", "Normal");
-        }
-        if (breaths < MIN_BREATHS_FOR_RATE) {
-            // One inhaler puff, or the first breaths of a session: a rate would be meaningless
-            return new BreathingResult(0, "Measuring breathing rate...",
-                    breaths + " of " + MIN_BREATHS_FOR_RATE + " breaths so far. Keep breathing normally "
-                            + "through the mouthpiece to measure the rate.", "Normal");
-        }
-
-        // Rate from the spacing of the breaths themselves, not from how long the window is, so
-        // quiet time before the first breath does not make breathing look slow
-        float spanSec = (starts.get(breaths - 1) - starts.get(0)) / sampleRateHz;
-        float meanIntervalSec = spanSec / (breaths - 1);
-        float sinceLastSec = (pressureData.length - 1 - starts.get(breaths - 1)) / sampleRateHz;
-        if (sinceLastSec > Math.max(STALE_AFTER_SEC, 2 * meanIntervalSec)) {
-            return new BreathingResult(0, "Breathing paused",
-                    "No breath in the last " + Math.round(sinceLastSec) + " seconds.", "Normal");
-        }
-        int bpm = Math.round(60f / meanIntervalSec);
-
-        return classify(bpm, ageYears);
-    }
-
-    /**
-     * Counts breaths in as the inhalations in the data: suction (negative kPa from the device)
-     * reaching the threshold. Exhaling or coughing into the mouthpiece reads positive and is not
-     * counted, so a breath in and out counts once. The inhalation ends when suction falls below
-     * a quarter of the threshold (as in InhalationTracker), so a wavering breath is not counted
-     * twice; inhalations closer together than {@code minDistance} samples count as one.
-     * Sensor glitches (a frozen value or the sensor's limit, see
-     * {@link InhalationTracker#isSensorGlitch}) are not breaths.
-     */
-    public static int countInhalations(float[] kpa, int minDistance) {
-        return inhalationStarts(kpa, minDistance).size();
-    }
-
-    /** Sample index where each counted inhalation reaches the threshold, oldest first. */
-    public static List<Integer> inhalationStarts(float[] kpa, int minDistance) {
-        float release = INHALATION_THRESHOLD_KPA * InhalationTracker.ONSET_FRACTION;
-        List<Integer> starts = new ArrayList<>();
-        int lastStart = -minDistance;
-        int runStart = -1;
-        float runFirst = 0f, runPeak = 0f;
-        boolean runVaries = false;
-        for (int i = 0; i <= kpa.length; i++) {
-            float suction = i < kpa.length ? -kpa[i] : 0f;   // the data's end closes an open run
-            if (runStart < 0) {
-                if (i < kpa.length && suction >= INHALATION_THRESHOLD_KPA) {
-                    runStart = i;
-                    runFirst = suction;
-                    runPeak = suction;
-                    runVaries = false;
-                }
-            } else if (suction < release || i == kpa.length) {
-                if (!InhalationTracker.isSensorGlitch(runVaries, runPeak)) {
-                    if (runStart - lastStart >= minDistance) starts.add(runStart);
-                    lastStart = runStart;
-                }
-                runStart = -1;
-            } else {
-                if (suction != runFirst) runVaries = true;
-                if (suction > runPeak) runPeak = suction;
-            }
-        }
-        return starts;
-    }
-
-    /**
-     * Breathing pattern from the breathing sounds ({@link BreathSoundAnalyzer}), which replaces the
-     * pressure-based rate for now. Only the pattern and its confidence are shown; the estimated
+     * Breathing pattern from the breathing sounds ({@link BreathSoundAnalyzer}). Only the pattern
+     * and its confidence are shown; the estimated
      * rate stays internal. Only a high-confidence pattern is used for the advice (its bpm is
      * passed on); a medium or low one is shown for information with bpm 0, as not measured.
      * A low-confidence "normal" is not shown at all: on held-out recordings it was almost never
@@ -206,7 +104,8 @@ public class BreathingAnalyzer {
         String range = RespiratoryNorms.rangeText(ageYears);
 
         if (bpm <= 0) {
-            return new BreathingResult(0, "Awaiting Inhalation...", "Inhale through the mouthpiece to measure breathing rate.", "Normal");
+            return new BreathingResult(0, NOT_MEASURED_PATTERN,
+                    "The breathing pattern was not measured clearly, so it is not used for the advice.", "Normal");
         } else if (RespiratoryNorms.isAboveNormal(bpm, ageYears)) {
             pattern = "Rapid Breathing (Tachypnea-like)";
             insight = "Breathing is faster than the normal " + range + " range. This can happen with exertion, "

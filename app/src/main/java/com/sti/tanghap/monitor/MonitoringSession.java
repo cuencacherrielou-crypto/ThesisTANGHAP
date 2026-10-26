@@ -30,7 +30,6 @@ import com.sti.tanghap.data.SessionEvent;
 import com.sti.tanghap.data.SessionStore;
 import com.sti.tanghap.domain.BatteryAlert;
 import com.sti.tanghap.domain.CoughHistory;
-import com.sti.tanghap.domain.InhalationTracker;
 import com.sti.tanghap.notify.NotificationHelper;
 import com.sti.tanghap.ui.LiveSessionActivity;
 
@@ -44,7 +43,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -52,7 +50,8 @@ import java.util.concurrent.RejectedExecutionException;
 
 /**
  * One monitoring session: connects to the inhaler attachment, records and analyzes the
- * pressure, audio and inhaler-press data, and saves the session when it ends.
+ * microphone audio (coughs, wheezes and the breathing pattern) and the inhaler presses,
+ * and saves the session when it ends.
  *
  * Owned by {@link MonitoringService}, so it keeps running when the screen is closed or the
  * phone is locked. The live screen only displays it through {@link Listener}.
@@ -65,19 +64,12 @@ public class MonitoringSession implements BleListener {
     /** app_prefs key for the last inhaler this phone connected to (device setting, not user data). */
     public static final String PREF_LAST_DEVICE = "last_device_address";
 
-    // Breathing pattern from the breathing sounds (the pressure sensor is not used for it for now)
+    // Breathing pattern from the breathing sounds heard by the microphone
     private static final int LIVE_BREATH_WINDOW_S = 60;   // the live pattern is judged on the last 60 s
     private static final int LIVE_BREATH_EVERY_S = 5;     // and updated every 5 s of audio
 
-    // Pressure recording
-    private static final int MAX_RECORDED_SAMPLES = 200_000;  // memory cap for the stored session trace
-    private static final int TRACE_POINTS = 200;              // points saved for the result chart
-    /** A sequence jump larger than this means the device restarted its counter, not lost packets. */
-    private static final long MAX_PLAUSIBLE_GAP = 10_000;
-
-    // Event log limits (only frequent inhalation events are capped)
+    // Event log limit (only frequent audio-gap events are capped)
     private static final int MAX_EVENTS = 3000;
-    private static final int MAX_INHALATION_EVENTS = 1500;
 
     // Cough model audio windows (16 kHz 16-bit mono)
     private static final int CLIP_BYTES = MfccExtractor.CLIP_SAMPLES * 2; // 2 s, the clip length the model was trained on
@@ -97,8 +89,6 @@ public class MonitoringSession implements BleListener {
     private static final String DEBUG_AUDIO_DIR = "debug_audio";
     private static final long DEBUG_AUDIO_MAX_BYTES = 5L * 60 * MfccExtractor.SAMPLE_RATE * 2; // 5 min
     private static final int DEBUG_AUDIO_KEEP = 20;                                          // newest sessions kept
-    /** Debug builds only: how often the raw pressure range is logged, for tuning the inhalation threshold. */
-    private static final long PRESSURE_DEBUG_LOG_MS = 1000;
     /** Wheezing heard again within this time is the same wheeze, not a new one. */
     private static final long WHEEZE_REPEAT_MS = 2000;
     /**
@@ -171,27 +161,19 @@ public class MonitoringSession implements BleListener {
 
     private BleManager ble;
     private final AssessmentEngine assessmentEngine = new AssessmentEngine();
-    private final InhalationTracker inhalationTracker = new InhalationTracker(BreathingAnalyzer.INHALATION_THRESHOLD_KPA);
     private final PatientProfile profile;
     private boolean worseningNotified = false;
     private int reconnectAttempts = 0;
-    private long pressureDebugSinceMillis = 0;
-    private float pressureDebugMin = Float.MAX_VALUE;
-    private float pressureDebugMax = -Float.MAX_VALUE;
-    private double pressureDebugSum = 0;
-    private int pressureDebugCount = 0;
 
     // ---- Main-thread state ----
     private final long sessionStartMillis = System.currentTimeMillis();
     private final String userId;
-    private float[] recordedSamples = new float[4096];
-    /** Estimated time of each recorded sample, in ms from sessionStartMillis. */
-    private int[] recordedTimes = new int[4096];
-    private int recordedCount = 0;
     private BreathingAnalyzer.BreathingResult lastBreathing;
     private AssessmentEngine.AssessmentResult lastAssessment;
-    private long lastSequence = -1;
-    private int droppedPackets = 0;
+    /** Gaps in the Bluetooth audio stream (lost audio, filled in); saved as the session's data gaps. */
+    private int audioGaps = 0;
+    /** Set when the first audio arrives from the device. */
+    private volatile boolean audioReceived = false;
     private boolean connected = false;
     private boolean everConnected = false;
     private int clipsClassified = 0;
@@ -377,7 +359,7 @@ public class MonitoringSession implements BleListener {
         long endMillis = System.currentTimeMillis();
 
         // Nothing came from the device: an empty session would only distort history and baselines
-        if (recordedCount == 0 && clipsClassified == 0 && totalActuationCount == 0) {
+        if (!audioReceived && clipsClassified == 0 && totalActuationCount == 0) {
             finish(null, everConnected
                     ? "No sensor data was received from the device, so this session was not saved."
                     : "The device never connected, so this session was not saved.");
@@ -392,17 +374,6 @@ public class MonitoringSession implements BleListener {
         // assessment can be recalculated after a cough review; it is never shown.
         BreathingAnalyzer.BreathingResult sessionBreathing = BreathingAnalyzer.forSession(breathingSounds, profile.ageYears);
         int avgBpm = sessionBreathing.bpm;
-
-        inhalationTracker.finish();
-
-        // Each inhalation, with the time it started, goes into the event log
-        List<InhalationTracker.Inhalation> inhalations = inhalationTracker.getInhalations();
-        int from = Math.max(0, inhalations.size() - MAX_INHALATION_EVENTS);
-        for (int i = from; i < inhalations.size(); i++) {
-            InhalationTracker.Inhalation in = inhalations.get(i);
-            events.add(new SessionEvent(in.startMillis, SessionEvent.Type.INHALATION, in.durationMillis,
-                    String.format(Locale.US, "%.1f", in.peakKpa)));
-        }
         events.sort((a, b) -> Long.compare(a.timeMillis, b.timeMillis));
 
         // Cough count, finding and assessment come from the counted coughs in the event log,
@@ -410,15 +381,11 @@ public class MonitoringSession implements BleListener {
         CoughReview.Outcome review = CoughReview.evaluate(events, avgBpm, profile,
                 priorCoughTimes, priorWheezeTimes, endMillis, ZoneId.systemDefault());
         AssessmentEngine.AssessmentResult assessment = review.assessment;
-        String[] trace = buildPressureTrace();
 
         SessionEntity s = new SessionEntity(UUID.randomUUID().toString());
         s.userId = userId;
         s.startTimeMillis = sessionStartMillis;
         s.endTimeMillis = endMillis;
-        // Strongest real inhalation, so a single spike, an exhalation or a cough cannot set it
-        s.peakPressureKpa = inhalationTracker.getPeakEffortKpa();
-        s.inhaleDurationMillis = inhalationTracker.getAverageInhaleMillis();
         s.averageBpm = avgBpm;
         s.detectedPattern = sessionBreathing.pattern;
         s.coughCount = review.coughCount;
@@ -431,10 +398,8 @@ public class MonitoringSession implements BleListener {
         s.otcRecommendation = assessment.medicationGuidance;
         s.riskLevelHigh = assessment.recommendHospital;
         s.recommendation = assessment.guidance;
-        s.pressureTrace = trace[0];
-        s.pressureTraceTimes = trace[1];
         s.eventLog = SessionEvent.encode(events);
-        s.droppedPackets = droppedPackets;
+        s.droppedPackets = audioGaps;
 
         ctx.getSharedPreferences(HealthPrefs.SESSION_PREFS, Context.MODE_PRIVATE).edit()
                 .putLong("last_timestamp", endMillis)
@@ -472,91 +437,26 @@ public class MonitoringSession implements BleListener {
     }
 
     /**
-     * Down-sampled recorded pressure, keeping the largest-magnitude value of each bucket so
-     * peaks survive. Returns {values, times}: comma-separated kPa values and, for each value,
-     * its time in ms from the session start.
-     */
-    private String[] buildPressureTrace() {
-        if (recordedCount == 0) return new String[]{null, null};
-        int points = Math.min(TRACE_POINTS, recordedCount);
-        StringBuilder values = new StringBuilder();
-        StringBuilder times = new StringBuilder();
-        for (int p = 0; p < points; p++) {
-            int from = (int) ((long) p * recordedCount / points);
-            int to = (int) ((long) (p + 1) * recordedCount / points);
-            int best = from;
-            for (int i = from + 1; i < to; i++) {
-                if (Math.abs(recordedSamples[i]) > Math.abs(recordedSamples[best])) best = i;
-            }
-            if (p > 0) {
-                values.append(',');
-                times.append(',');
-            }
-            values.append(String.format(Locale.US, "%.2f", recordedSamples[best]));
-            times.append(recordedTimes[best]);
-        }
-        return new String[]{values.toString(), times.toString()};
-    }
-
-    /**
      * Coughs, inhaler presses and connection events are always kept so daily totals are complete;
-     * only frequent breathing-rate readings are capped (none are logged while the rate is hidden).
+     * only frequent audio-gap events are capped.
      */
     private void addEvent(SessionEvent e) {
-        if (e.type != SessionEvent.Type.BREATHING_RATE || events.size() < MAX_EVENTS) events.add(e);
+        if (e.type != SessionEvent.Type.AUDIO_GAP || events.size() < MAX_EVENTS) events.add(e);
     }
 
     // =========================================================
-    // PRESSURE (main thread)
+    // BLUETOOTH AUDIO GAPS (main thread)
     // =========================================================
 
+    /** Audio lost over Bluetooth (already filled in by the decoder) is logged as a data gap. */
     @Override
-    public void onPressureSamples(long sequence, float[] kpaSamples) {
+    public void onAudioGap(int lostMs) {
         final long arrival = System.currentTimeMillis();
-        main.post(() -> handlePressurePacket(arrival, sequence, kpaSamples));
-    }
-
-    private void handlePressurePacket(long arrival, long sequence, float[] kpaSamples) {
-        if (sessionEnding || kpaSamples.length == 0) return;
-
-        logPressureDebug(arrival, kpaSamples);
-        trackSequence(arrival, sequence);
-        // Still recorded and saved with the session, but not shown or used for the breathing
-        // pattern for now (the pressure sensor is not reliable yet)
-        inhalationTracker.addSamples(kpaSamples, arrival);
-
-        // The packet's last sample arrives with it; earlier samples are one sample period apart
-        float msPerSample = inhalationTracker.msPerSample();
-        int n = kpaSamples.length;
-        for (int i = 0; i < n; i++) {
-            long sampleTime = arrival - Math.round((n - 1 - i) * msPerSample);
-            recordSample(kpaSamples[i], sampleTime);
-        }
-    }
-
-    /** Counts packets lost in transmission from gaps in the device's packet counter. */
-    private void trackSequence(long arrival, long sequence) {
-        if (lastSequence >= 0 && sequence > lastSequence + 1) {
-            long missing = sequence - lastSequence - 1;
-            if (missing <= MAX_PLAUSIBLE_GAP) {
-                droppedPackets += (int) missing;
-                addEvent(new SessionEvent(arrival, SessionEvent.Type.DATA_GAP, missing, ""));
-            }
-        }
-        // A lower or equal number means the device restarted its counter: start counting again
-        lastSequence = sequence;
-    }
-
-    private void recordSample(float val, long sampleTimeMillis) {
-        if (recordedCount >= MAX_RECORDED_SAMPLES) return;
-        if (recordedCount == recordedSamples.length) {
-            int newSize = Math.min(recordedSamples.length * 2, MAX_RECORDED_SAMPLES);
-            recordedSamples = Arrays.copyOf(recordedSamples, newSize);
-            recordedTimes = Arrays.copyOf(recordedTimes, newSize);
-        }
-        recordedSamples[recordedCount] = val;
-        recordedTimes[recordedCount] = (int) Math.max(0, sampleTimeMillis - sessionStartMillis);
-        recordedCount++;
+        main.post(() -> {
+            if (sessionEnding) return;
+            audioGaps++;
+            addEvent(new SessionEvent(arrival, SessionEvent.Type.AUDIO_GAP, lostMs, ""));
+        });
     }
 
     // =========================================================
@@ -650,6 +550,7 @@ public class MonitoringSession implements BleListener {
 
     @Override
     public void onAudioDataReceived(byte[] audioBytes) {
+        audioReceived = true;
         final byte[] copy = audioBytes.clone();
         final long arrival = System.currentTimeMillis();
         runOnAudioThread(() -> processAudio(copy, arrival));
@@ -729,31 +630,6 @@ public class MonitoringSession implements BleListener {
             long soundTime = sampleTimeMillis(sound.startSample);
             main.post(() -> onSensedSoundClassified(result, soundTime));
         }
-    }
-
-    /**
-     * Debug builds only: once a second, logs the raw kPa range since the last line (tag
-     * "MonitoringSession", filter "PressureDebug"). Suction is negative, so the min is the
-     * strongest inhalation; compare it with the threshold to tune it.
-     */
-    private void logPressureDebug(long arrival, float[] kpaSamples) {
-        if ((ctx.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0) return;
-        for (float v : kpaSamples) {
-            if (v < pressureDebugMin) pressureDebugMin = v;
-            if (v > pressureDebugMax) pressureDebugMax = v;
-            pressureDebugSum += v;
-        }
-        pressureDebugCount += kpaSamples.length;
-        if (arrival - pressureDebugSinceMillis < PRESSURE_DEBUG_LOG_MS) return;
-        Log.d(TAG, String.format(java.util.Locale.US,
-                "PressureDebug n=%d min=%.3f max=%.3f mean=%.3f kPa (inhale threshold -%.2f)",
-                pressureDebugCount, pressureDebugMin, pressureDebugMax,
-                pressureDebugSum / pressureDebugCount, BreathingAnalyzer.INHALATION_THRESHOLD_KPA));
-        pressureDebugSinceMillis = arrival;
-        pressureDebugMin = Float.MAX_VALUE;
-        pressureDebugMax = -Float.MAX_VALUE;
-        pressureDebugSum = 0;
-        pressureDebugCount = 0;
     }
 
     /** Debug builds only: keeps the first 5 minutes of the session's microphone audio in app storage. */
@@ -870,8 +746,6 @@ public class MonitoringSession implements BleListener {
             everConnected = true;
             connected = true;
             reconnectAttempts = 0;
-            // A reconnected device may restart its packet counter
-            lastSequence = -1;
             addEvent(new SessionEvent(connectedAt, SessionEvent.Type.CONNECTED, wasReconnecting ? 1 : 0, deviceName));
             message(wasReconnecting ? "Reconnected to TANGHAP" : "Connected to TANGHAP");
             publish();

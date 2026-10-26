@@ -4,8 +4,8 @@ public interface BleListener {
     void onScanResults(List<BleDeviceItem> results);
     void onConnected(String deviceName);
     void onDisconnected();
-    /** @param sequence the packet counter from the device, used to detect lost packets */
-    void onPressureSamples(long sequence, float[] kpaSamples);
+    /** Audio was lost over Bluetooth and filled in; called before the audio that follows the gap. */
+    void onAudioGap(int lostMs);
     void onActuationEvent(long tsMillis);
     void onBattery(Integer percent);
     void onDeviceInfo(String info);

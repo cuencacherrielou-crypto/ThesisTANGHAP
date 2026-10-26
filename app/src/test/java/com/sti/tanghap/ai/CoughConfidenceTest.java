@@ -35,9 +35,11 @@ public class CoughConfidenceTest {
     }
 
     @Test
-    public void strongSevereIsSevere() {
+    public void severeIsNeverACoughsType() {
+        // Severe is measured from the cough history (coughing fits for 2 weeks), not from one sound
         AiCoughClassifier.Result r = result(.05f, .09f, .01f, .76f, .07f, .02f);
-        assertEquals(CoughClass.SEVERE_COUGH, r.coughType());
+        assertTrue(r.isConfidentCough());
+        assertEquals(CoughClass.WET_COUGH, r.coughType());
     }
 
     @Test

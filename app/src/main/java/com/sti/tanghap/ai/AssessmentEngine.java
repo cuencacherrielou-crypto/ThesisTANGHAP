@@ -21,6 +21,9 @@ public class AssessmentEngine {
     /** Persistent cough is measured from the cough history (see CoughHistory), not from one cough's sound. */
     public static final String PERSISTENT_OBSERVATION =
             "Coughs have been recorded on and off for 3 weeks or more (persistent cough).";
+    /** Severe cough is measured from the cough history too: coughing fits during a cough of 2 weeks or more (CDC). */
+    public static final String SEVERE_OBSERVATION =
+            "Coughing fits (many coughs in a row) were recorded during a cough lasting 2 weeks or more (severe cough).";
 
     public static final String GUIDANCE_HOSPITAL =
             "Immediate clinical evaluation at a hospital or emergency facility is recommended.";
@@ -100,7 +103,7 @@ public class AssessmentEngine {
         boolean slow = RespiratoryNorms.isBelowNormal(bpm, age);
         boolean coughing = ev.coughs > 0;
         boolean productive = ev.productive();
-        boolean repeatedSevere = ev.repeatedSevere();
+        boolean severe = ev.severe;
         boolean repeatedWheeze = ev.repeatedWheeze();
         CoughClass mainType = ev.mainCoughType();
         result.wheezeDetected = ev.wheezes > 0;
@@ -108,7 +111,7 @@ public class AssessmentEngine {
 
         // COPD flare-up signs (GOLD 2024 exacerbation; Anthonisen 1987): more coughing, phlegm,
         // breathlessness. Two of the three are needed.
-        boolean moreCoughing = ev.continuous || repeatedSevere || ev.persistent;
+        boolean moreCoughing = ev.continuous || severe || ev.persistent;
         int copdSigns = (moreCoughing ? 1 : 0) + (productive ? 1 : 0) + (rapid ? 1 : 0);
 
         // 1. PNEUMONIA-LIKE (WHO IMCI 2014: cough with fast breathing for the age). Needs repeated
@@ -153,7 +156,7 @@ public class AssessmentEngine {
             if (ev.persistent) result.observations.add(PERSISTENT_OBSERVATION);
             else if (ev.continuous) result.observations.add("Coughing more than usual: 3 or more coughing episodes in 24 hours, or over an hour of coughing.");
             if (productive) result.observations.add(productiveObservation(ev));
-            if (repeatedSevere) result.observations.add(severeObservation(ev));
+            if (severe) result.observations.add(SEVERE_OBSERVATION);
             if (rapid) result.observations.add(rateObservation("above the normal " + range + " range for your age"));
             result.observations.add("Profile lists a history of COPD.");
             result.possibleCondition = CATEGORY_COPD;
@@ -164,8 +167,9 @@ public class AssessmentEngine {
         // 4. BRONCHITIS-LIKE (AAFP 2016 acute bronchitis: a cough lasting more than 5 days, often
         //    with phlegm, without pneumonia signs). Needs BOTH a productive cough (most coughs
         //    sounding wet, repeatedly) AND coughing that has gone on for more than 5 days. Fast
-        //    breathing with the coughing was already sent to branch 1.
-        else if (productive && ev.lastingCough()) {
+        //    breathing with the coughing was already sent to branch 1. A severe cough (coughing fits
+        //    for 2 weeks or more, the CDC pertussis signs) is checked by a doctor instead (branch 5).
+        else if (productive && ev.lastingCough() && !severe) {
             result.possibleFindings.add(CATEGORY_BRONCHITIS
                     + ": the cough pattern can occur when the airways are irritated or inflamed.");
             result.observations.add(productiveObservation(ev));
@@ -191,7 +195,7 @@ public class AssessmentEngine {
                 result.observations.add(rateObservation("below the normal " + range + " range for your age"));
                 result.recommendClinic = true;
             } else {
-                if (!repeatedSevere && !ev.persistent) result.possibleFindings.add("Respiratory metrics remain within baseline parameters.");
+                if (!severe && !ev.persistent) result.possibleFindings.add("Respiratory metrics remain within baseline parameters.");
                 if (bpm > 0) result.observations.add(rateObservation("within the normal " + range + " range for your age"));
             }
             if (coughing) result.observations.add(coughsObservation(ev) + ".");
@@ -201,15 +205,13 @@ public class AssessmentEngine {
                 result.observations.add(PERSISTENT_OBSERVATION);
                 result.recommendClinic = true;
             }
-            if (repeatedSevere) {
-                // Without fast breathing repeated severe coughing is checked by a doctor, not treated with OTC medicine
-                result.possibleFindings.add("Repeated severe coughing without fast breathing: have it checked by a doctor.");
-                result.observations.add(severeObservation(ev));
+            if (severe) {
+                // CDC: a cough of 2 weeks or more with coughing fits can be whooping cough (pertussis),
+                // which needs a doctor (prescribed antibiotics; it spreads to others); no OTC medicine
+                result.possibleFindings.add("Severe cough: coughing fits during a cough lasting 2 weeks or more. "
+                        + "Have it checked by a doctor soon, and keep away from babies until then.");
+                result.observations.add(SEVERE_OBSERVATION);
                 result.recommendClinic = true;
-            } else if (ev.count(CoughClass.SEVERE_COUGH) > 0) {
-                result.observations.add(ev.count(CoughClass.SEVERE_COUGH) == 1
-                        ? "One cough sounded severe; a single cough is not enough to judge severity."
-                        : "Some coughs sounded severe, but not most of them; keep monitoring.");
             }
             if (ev.wheezes > 0) {
                 result.observations.add(wheezeObservation(ev) + " Wheezing in one session is not enough to "
@@ -221,7 +223,7 @@ public class AssessmentEngine {
 
             // Allergies are background information only; OTC guidance is given for coughs only.
             result.possibleCondition = CATEGORY_STANDARD;
-            if (repeatedSevere) medicine = OtcGuidance.SEEK_CARE;
+            if (severe) medicine = OtcGuidance.SEEK_CARE;
             else if (ev.persistent) medicine = OtcGuidance.PERSISTENT_COUGH;
             else if (mainType == CoughClass.WET_COUGH) medicine = OtcGuidance.WET_COUGH;
             else if (mainType == CoughClass.DRY_COUGH) medicine = OtcGuidance.DRY_COUGH;
@@ -272,7 +274,7 @@ public class AssessmentEngine {
         return "Breathing, judged from its sounds, is " + qualifier + ".";
     }
 
-    /** e.g. "5 coughs detected (4 wet, 1 severe)", without the closing period. */
+    /** e.g. "5 coughs detected (4 wet, 1 dry)", without the closing period ("severe" only in older sessions). */
     private static String coughsObservation(CoughEvidence ev) {
         List<String> parts = new ArrayList<>();
         if (ev.count(CoughClass.DRY_COUGH) > 0) parts.add(ev.count(CoughClass.DRY_COUGH) + " dry");
@@ -284,11 +286,6 @@ public class AssessmentEngine {
     private static String productiveObservation(CoughEvidence ev) {
         return "Wet / productive cough pattern: " + ev.count(CoughClass.WET_COUGH) + " of " + ev.coughs
                 + " coughs sounded wet.";
-    }
-
-    private static String severeObservation(CoughEvidence ev) {
-        return "Repeated severe coughing: " + ev.count(CoughClass.SEVERE_COUGH) + " of " + ev.coughs
-                + " coughs sounded severe.";
     }
 
     private static String wheezeObservation(CoughEvidence ev) {

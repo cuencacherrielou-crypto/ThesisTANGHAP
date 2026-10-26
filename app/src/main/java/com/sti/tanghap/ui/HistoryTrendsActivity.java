@@ -103,7 +103,7 @@ public class HistoryTrendsActivity extends AppCompatActivity {
         executor.shutdown();
     }
 
-    // Breathing-rate and inhalation-effort trends are hidden for now; coughs are charted per session
+    // Coughs are charted per session (breathing is shown as a pattern only, so it has no rate chart)
     private void setupCharts() {
         styleBarChart(chartCough);
         showGhostData();

@@ -13,17 +13,17 @@ import java.util.List;
  * user are left out. Used when a session ends and again whenever the user removes or
  * restores a cough, so the saved result always matches the coughs that are counted.
  *
- * The cough type (dry / wet / severe) comes from the sound model: the session's finding is its
- * most frequent cough type (or wheezing, when heard repeatedly), not just the last sound heard.
- * Whether the cough is persistent comes from the cough history ({@link CoughHistory}): when the
- * user has been coughing on and off for 3 weeks or more, the session's cough finding is a
- * persistent cough (repeated severe coughing or wheezing, which need care sooner, is still
- * reported as such). The assessment combines all the session's signs ({@link CoughEvidence}).
+ * The cough type (dry / wet) comes from the sound model: the session's finding is its most
+ * frequent cough type (or wheezing, when heard repeatedly), not just the last sound heard.
+ * Whether the cough is severe or persistent comes from the cough history ({@link CoughHistory}):
+ * coughing fits during a cough of 2 weeks or more make the finding a severe cough; coughing on
+ * and off for 3 weeks or more makes it a persistent cough (wheezing is still reported as such). The assessment combines all the session's signs ({@link CoughEvidence}).
  */
 public final class CoughReview {
 
     public static final String CONTINUOUS_EPISODES_OBSERVATION =
             "3 or more coughing episodes in the last 24 hours (continuous cough).";
+    public static final String UNTYPED_COUGH_FINDING = "Cough (dry or wet not told apart)";
     public static final String CONTINUOUS_LONG_OBSERVATION =
             "Coughing for more than an hour in the last 24 hours (continuous cough).";
 
@@ -37,10 +37,12 @@ public final class CoughReview {
         public final CoughEvidence evidence;
         /** True when the finding is a persistent cough measured from the history. */
         public final boolean persistentFromHistory;
+        /** True when the finding is a severe cough measured from the history. */
+        public final boolean severeFromHistory;
 
         Outcome(int coughCount, CoughClass finding, int findingConfidencePercent,
                 AssessmentEngine.AssessmentResult assessment, CoughHistory.Result history,
-                CoughEvidence evidence, boolean persistentFromHistory) {
+                CoughEvidence evidence, boolean persistentFromHistory, boolean severeFromHistory) {
             this.coughCount = coughCount;
             this.finding = finding;
             this.findingConfidencePercent = findingConfidencePercent;
@@ -48,6 +50,7 @@ public final class CoughReview {
             this.history = history;
             this.evidence = evidence;
             this.persistentFromHistory = persistentFromHistory;
+            this.severeFromHistory = severeFromHistory;
         }
 
         /**
@@ -55,10 +58,15 @@ public final class CoughReview {
          * "Persistent cough (coughing on and off for 24 days)".
          */
         public String findingText() {
+            if (severeFromHistory) {
+                return CoughClass.SEVERE_COUGH.label + " (coughing fits, coughing on and off for " + history.spellDays + " days)";
+            }
             if (persistentFromHistory) {
                 return CoughClass.PERSISTENT_COUGH.label + " (coughing on and off for " + history.spellDays + " days)";
             }
-            return finding != null ? finding.findingText(findingConfidencePercent) : CoughClass.NON_COUGH.label;
+            if (finding != null) return finding.findingText(findingConfidencePercent);
+            // only coughs an older build saved as "severe", whose dry / wet type was not kept
+            return coughCount > 0 ? UNTYPED_COUGH_FINDING : CoughClass.NON_COUGH.label;
         }
     }
 
@@ -86,8 +94,10 @@ public final class CoughReview {
 
         CoughClass finding = finding(ev);
         int confidence = finding != null ? ev.meanPercent(finding) : 0;
-        boolean persistentFromHistory = ev.persistent
-                && finding != CoughClass.WHEEZING && !ev.repeatedSevere();
+        // Like a persistent cough, a severe cough is measured from the history; it needs care sooner
+        boolean severeFromHistory = ev.severe && finding != CoughClass.WHEEZING;
+        boolean persistentFromHistory = ev.persistent && finding != CoughClass.WHEEZING && !severeFromHistory;
+        if (severeFromHistory) finding = CoughClass.SEVERE_COUGH;
         if (persistentFromHistory) finding = CoughClass.PERSISTENT_COUGH;
 
         BreathingAnalyzer.BreathingResult breathing = BreathingAnalyzer.classify(averageBpm, profile.ageYears);
@@ -96,7 +106,8 @@ public final class CoughReview {
             assessment.observations.add(history.episodesLast24h >= CoughHistory.CONTINUOUS_EPISODES
                     ? CONTINUOUS_EPISODES_OBSERVATION : CONTINUOUS_LONG_OBSERVATION);
         }
-        return new Outcome(ev.coughs, finding, confidence, assessment, history, ev, persistentFromHistory);
+        return new Outcome(ev.coughs, finding, confidence, assessment, history, ev, persistentFromHistory,
+                severeFromHistory);
     }
 
     /**

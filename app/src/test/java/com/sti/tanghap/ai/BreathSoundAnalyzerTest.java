@@ -117,6 +117,11 @@ public class BreathSoundAnalyzerTest {
                 {"device_sessions/pull5/files/debug_audio/session_1792992650034.pcm", "40.7500 63.7500", "none", "None"},
                 {"device_sessions/pull5/files/debug_audio/session_1792992727688.pcm", "9.6500 32.4000 39.9500", "40.0000", "one phase"},
                 {"device_sessions/pull5/files/debug_audio/session_1792992779494.pcm", "46.1500", "none", "None"},
+                // 14:37-14:40 sessions; the user confirmed the pattern shown: Normal, Slow, Slow, Rapid
+                {"device_sessions/pull6/files/debug_audio/session_1792996648128.pcm", "4.7000 10.4000 24.1000 25.3500 38.4000 46.3500", "11.6505", "two phases"},
+                {"device_sessions/pull6/files/debug_audio/session_1792996736087.pcm", "5.9000 14.1000 17.3500 43.8500", "10.1695", "one phase"},
+                {"device_sessions/pull6/files/debug_audio/session_1792996805439.pcm", "18.5500", "6.4516", "two phases"},
+                {"device_sessions/pull6/files/debug_audio/session_1792996855501.pcm", "8.6000 12.6500", "27.2727", "two phases"},
         };
         for (String[] row : ref) {
             File f = new File(root, row[0]);
