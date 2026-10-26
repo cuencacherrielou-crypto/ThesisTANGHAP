@@ -115,15 +115,11 @@ public class AlertsActivity extends AppCompatActivity {
 
             BaselineCalculator.Baseline baseline = new BaselineCalculator().compute(baselineList);
 
-            float todayPeak = 0;
-            float todayInhale = 0;
             int todayCough = 0;
             int todayAct = 0;
             int todayBpm = 0;
 
             if (latest != null) {
-                todayPeak = latest.peakPressureKpa;
-                todayInhale = latest.inhaleDurationMillis;
                 todayCough = latest.coughCount;
                 todayAct = latest.actuationCount;
                 todayBpm = latest.averageBpm;
@@ -150,8 +146,10 @@ public class AlertsActivity extends AppCompatActivity {
                 ));
             }
 
+            // Inhalation effort (pressure) alerts are off for now: the pressure sensor is not
+            // reliable yet, so its strength and duration are not used or shown (0 = not recorded)
             alerts.addAll(new AlertEngine().evaluate(
-                    baseline, userAge, todayBpm, todayPeak, todayInhale, todayCough, todayAct
+                    baseline, userAge, todayBpm, 0f, 0f, todayCough, todayAct
             ));
 
             // Late or missed inhaler doses

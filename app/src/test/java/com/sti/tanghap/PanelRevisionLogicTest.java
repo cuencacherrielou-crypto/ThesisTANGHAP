@@ -21,12 +21,22 @@ public class PanelRevisionLogicTest {
     // ---------- Wheezing ----------
 
     @Test
-    public void wheezeFromModel_triggersAsthmaFinding() {
+    public void singleWheezeFromModel_isNotedButNamesNoCondition() {
         AssessmentEngine.AssessmentResult r = new AssessmentEngine().generatePreliminaryAssessment(
                 bpm(16), CoughClass.WHEEZING, false, false, false);
         assertTrue(r.wheezeDetected);
-        assertEquals(AssessmentEngine.CATEGORY_ASTHMA, r.possibleCondition);
-        assertTrue(r.recommendHospital);
+        // Asthma needs repeated, recurring wheezing with another symptom (AssessmentEngineTest)
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.possibleCondition);
+        assertFalse(r.recommendHospital);
+    }
+
+    @Test
+    public void singleWheezeWithRapidBreathing_isNotHospital() {
+        AssessmentEngine.AssessmentResult r = new AssessmentEngine().generatePreliminaryAssessment(
+                bpm(26), CoughClass.WHEEZING, false, false, false);
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.possibleCondition);
+        assertFalse(r.recommendHospital);
+        assertTrue(r.recommendClinic);   // the rapid breathing is still checked
     }
 
     @Test
@@ -38,10 +48,12 @@ public class PanelRevisionLogicTest {
     }
 
     @Test
-    public void persistentCough_withCopdHistory_givesCopdFinding() {
-        AssessmentEngine.AssessmentResult r = new AssessmentEngine().generatePreliminaryAssessment(
-                bpm(16), CoughClass.PERSISTENT_COUGH, false, true, false);
-        assertEquals(AssessmentEngine.CATEGORY_COPD, r.possibleCondition);
+    public void persistentCough_withCopdHistory_needsASecondSign() {
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, new AssessmentEngine().generatePreliminaryAssessment(
+                bpm(16), CoughClass.PERSISTENT_COUGH, false, true, false).possibleCondition);
+        // with breathlessness (rapid breathing) as well: a possible flare-up
+        assertEquals(AssessmentEngine.CATEGORY_COPD, new AssessmentEngine().generatePreliminaryAssessment(
+                bpm(22), CoughClass.PERSISTENT_COUGH, false, true, false).possibleCondition);
     }
 
     // ---------- Inhalation duration ----------
@@ -52,7 +64,8 @@ public class PanelRevisionLogicTest {
         // 10 samples per packet, one packet every 100 ms -> 10 ms per sample
         float[] quiet = new float[10];
         float[] inhale = new float[10];
-        for (int i = 0; i < 10; i++) inhale[i] = -3.0f;   // suction shows as negative pressure
+        // suction shows as negative pressure; a real reading wavers (a frozen value is a glitch)
+        for (int i = 0; i < 10; i++) inhale[i] = (i % 2 == 0) ? -3.0f : -2.9f;
 
         long time = 0;
         t.addSamples(quiet, time += 100);

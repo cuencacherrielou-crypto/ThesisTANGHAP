@@ -26,6 +26,7 @@ public final class NotificationHelper {
     public static final int ID_WORSENING = 2001;
     public static final int ID_CONNECTION = 2002;
     public static final int ID_DOSE = 2003;
+    public static final int ID_BATTERY = 2004;
 
     private NotificationHelper() {}
 
@@ -35,7 +36,7 @@ public final class NotificationHelper {
                     CHANNEL_ALERTS,
                     "Health alerts",
                     NotificationManager.IMPORTANCE_HIGH);
-            channel.setDescription("Worsening readings, missed inhaler doses and device connection issues");
+            channel.setDescription("Worsening readings, missed inhaler doses, device connection issues and low device battery");
             NotificationManager nm = ctx.getSystemService(NotificationManager.class);
             if (nm != null) nm.createNotificationChannel(channel);
         }

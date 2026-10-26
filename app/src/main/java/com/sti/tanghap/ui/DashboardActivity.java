@@ -9,18 +9,25 @@ import android.widget.PopupMenu;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
-import com.github.mikephil.charting.charts.LineChart;
-import com.github.mikephil.charting.components.XAxis;
-import com.github.mikephil.charting.data.Entry;
-import com.github.mikephil.charting.data.LineData;
-import com.github.mikephil.charting.data.LineDataSet;
 import com.google.firebase.auth.FirebaseAuth;
 import com.sti.tanghap.R;
+import com.sti.tanghap.ai.AssessmentEngine;
+import com.sti.tanghap.ai.BreathingAnalyzer;
+import com.sti.tanghap.ai.CareAction;
+import com.sti.tanghap.ai.SavedAssessment;
 import com.sti.tanghap.data.AppDatabase;
 import com.sti.tanghap.data.HealthPrefs;
+import com.sti.tanghap.data.ProfilePrefs;
+import com.sti.tanghap.data.SessionDao;
 import com.sti.tanghap.data.SessionEntity;
-import java.util.ArrayList;
+import com.sti.tanghap.domain.BatteryAlert;
+import com.sti.tanghap.domain.CoughHistory;
+import com.sti.tanghap.domain.DailySummary;
+import com.sti.tanghap.domain.DoseReminder;
+import java.text.SimpleDateFormat;
+import java.time.ZoneId;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -28,10 +35,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class DashboardActivity extends AppCompatActivity {
-    private static final int TREND_SESSIONS = 14;
-
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private LineChart chartDashboard;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,9 +61,6 @@ public class DashboardActivity extends AppCompatActivity {
                 tvInitial.setText(email.substring(0, 1).toUpperCase(Locale.getDefault()));
             }
         }
-
-        chartDashboard = findViewById(R.id.chartDashboard);
-        styleChart();
 
         // Profile Click (Settings/Logout)
         findViewById(R.id.btnProfile).setOnClickListener(this::showProfileMenu);
@@ -109,7 +110,7 @@ public class DashboardActivity extends AppCompatActivity {
         super.onResume();
         updateBatteryDisplay();
         updateStatusCard();
-        loadPressureTrend();
+        loadSummaries();
     }
 
     @Override
@@ -123,31 +124,38 @@ public class DashboardActivity extends AppCompatActivity {
                 ? FirebaseAuth.getInstance().getCurrentUser().getUid() : "";
     }
 
+    /**
+     * Battery icon only (full, half, low, or a question mark until the device has reported its
+     * level), with a reminder to charge it when low. The notification is posted by MonitoringSession.
+     */
     private void updateBatteryDisplay() {
-        TextView tvDashboardBattery = findViewById(R.id.tvDashboardBattery);
         android.widget.ImageView ivDashboardBattery = findViewById(R.id.ivDashboardBattery);
+        TextView tvBatteryHint = findViewById(R.id.tvBatteryHint);
 
-        if (tvDashboardBattery != null) {
-            SharedPreferences pref = getSharedPreferences(HealthPrefs.SESSION_PREFS, MODE_PRIVATE);
-            int lastBattery = pref.getInt("last_battery", -1);
-            if (lastBattery != -1) {
-                tvDashboardBattery.setText(getString(R.string.battery_percent, lastBattery));
-                if (ivDashboardBattery != null) {
-                    if (lastBattery > 60) {
-                        ivDashboardBattery.setImageResource(R.drawable.ic_battery_full);
-                    } else if (lastBattery > 20) {
-                        ivDashboardBattery.setImageResource(R.drawable.ic_battery_half);
-                    } else {
-                        ivDashboardBattery.setImageResource(R.drawable.ic_battery_low);
-                    }
-                }
-            } else {
-                tvDashboardBattery.setText(R.string.battery_unknown);
-                if (ivDashboardBattery != null) {
-                    ivDashboardBattery.setImageResource(R.drawable.ic_battery_full);
-                }
-            }
+        int lastBattery = getSharedPreferences(HealthPrefs.SESSION_PREFS, MODE_PRIVATE).getInt("last_battery", -1);
+        if (lastBattery < 0) {
+            ivDashboardBattery.setImageResource(R.drawable.ic_battery_unknown);
+            ivDashboardBattery.setContentDescription(getString(R.string.battery_unknown));
+            tvBatteryHint.setVisibility(View.GONE);
+            return;
         }
+        int description;
+        if (lastBattery > 60) {
+            ivDashboardBattery.setImageResource(R.drawable.ic_battery_full);
+            description = R.string.battery_desc_full;
+        } else if (lastBattery > BatteryAlert.LOW_PERCENT) {
+            ivDashboardBattery.setImageResource(R.drawable.ic_battery_half);
+            description = R.string.battery_desc_half;
+        } else {
+            ivDashboardBattery.setImageResource(R.drawable.ic_battery_low);
+            description = R.string.battery_desc_low;
+        }
+        ivDashboardBattery.setContentDescription(getString(description));
+
+        int level = BatteryAlert.levelFor(lastBattery);
+        tvBatteryHint.setVisibility(level == BatteryAlert.LEVEL_NONE ? View.GONE : View.VISIBLE);
+        tvBatteryHint.setText(level == BatteryAlert.LEVEL_CRITICAL
+                ? R.string.battery_hint_critical : R.string.battery_hint_low);
     }
 
     /** Status pill and sensor line reflect real data instead of fixed text. */
@@ -176,54 +184,136 @@ public class DashboardActivity extends AppCompatActivity {
         }
     }
 
-    private void styleChart() {
-        int textColor = ContextCompat.getColor(this, R.color.text_medium_emphasis);
-        chartDashboard.getDescription().setEnabled(false);
-        chartDashboard.getLegend().setEnabled(false);
-        chartDashboard.getAxisRight().setEnabled(false);
-        chartDashboard.setTouchEnabled(false);
-        chartDashboard.getXAxis().setPosition(XAxis.XAxisPosition.BOTTOM);
-        chartDashboard.getXAxis().setDrawGridLines(false);
-        chartDashboard.getXAxis().setDrawLabels(false);
-        chartDashboard.getAxisLeft().setTextColor(textColor);
-        chartDashboard.getAxisLeft().setGridColor(ContextCompat.getColor(this, R.color.divider));
-        chartDashboard.getAxisLeft().setAxisMinimum(0f);
-        chartDashboard.setNoDataText(getString(R.string.chart_no_sessions));
-        chartDashboard.setNoDataTextColor(textColor);
-    }
-
-    /** Peak inhalation pressure of the user's most recent sessions, oldest to newest. */
-    private void loadPressureTrend() {
+    /** Today, the latest assessment and the last 7 days, from the sessions saved on this phone. */
+    private void loadSummaries() {
         String uid = currentUid();
+        int prescribed = ProfilePrefs.prescribedDoses(this);
         executor.execute(() -> {
-            List<SessionEntity> newestFirst = AppDatabase.getInstance(this).sessionDao().getAllForUser(uid);
-            // Only sessions that recorded pressure; 0 means "not measured", not a weak inhalation
-            List<SessionEntity> measured = new ArrayList<>();
-            for (SessionEntity s : newestFirst) {
-                if (s.peakPressureKpa > 0) measured.add(s);
-                if (measured.size() == TREND_SESSIONS) break;
-            }
-            List<Entry> entries = new ArrayList<>();
-            for (int i = 0; i < measured.size(); i++) {
-                entries.add(new Entry(i, measured.get(measured.size() - 1 - i).peakPressureKpa));
-            }
+            SessionDao dao = AppDatabase.getInstance(this).sessionDao();
+            long now = System.currentTimeMillis();
+            List<SessionEntity> recent = dao.getSinceForUser(uid, now - CoughHistory.LOOKBACK_MS);
+            List<DailySummary.Day> days = DailySummary.build(recent, Calendar.getInstance(), 14);
+            CoughHistory.Result coughs = CoughHistory.evaluate(
+                    CoughHistory.coughTimesBefore(recent, now + 1), now, ZoneId.systemDefault());
+            SessionEntity latest = !recent.isEmpty() ? recent.get(recent.size() - 1)
+                    : dao.getAllForUser(uid).stream().findFirst().orElse(null);
+            String condition = latest == null ? null
+                    : SavedAssessment.of(latest, HealthPrefs.loadProfile(this)).possibleCondition;
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
-                if (entries.isEmpty()) {
-                    chartDashboard.clear();
-                    return;
-                }
-                int color = ContextCompat.getColor(this, R.color.accent_teal);
-                LineDataSet set = new LineDataSet(entries, "Peak Pressure");
-                set.setColor(color);
-                set.setCircleColor(color);
-                set.setLineWidth(2.5f);
-                set.setDrawValues(false);
-                set.setMode(LineDataSet.Mode.CUBIC_BEZIER);
-                chartDashboard.setData(new LineData(set));
-                chartDashboard.invalidate();
+                showToday(days.get(0), prescribed);
+                showLatest(latest, condition);
+                showWeek(days, coughs);
             });
         });
+    }
+
+    private void showToday(DailySummary.Day today, int prescribed) {
+        TextView doses = findViewById(R.id.tvTodayDoses);
+        doses.setText(prescribed > 0 ? today.inhalerPresses + " / " + prescribed : String.valueOf(today.inhalerPresses));
+        ((TextView) findViewById(R.id.tvTodayCoughs)).setText(String.valueOf(today.coughs));
+        ((TextView) findViewById(R.id.tvTodayWheezes)).setText(String.valueOf(today.wheezes));
+        ((TextView) findViewById(R.id.tvTodayMonitored)).setText(formatDuration(today.monitoredMillis));
+
+        TextView status = findViewById(R.id.tvDoseStatus);
+        int color;
+        if (prescribed <= 0) {
+            status.setText(R.string.dose_status_not_set);
+            color = R.color.text_medium_emphasis;
+        } else {
+            Calendar cal = Calendar.getInstance();
+            int minute = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE);
+            DoseReminder.Result r = new DoseReminder().evaluate(prescribed, today.inhalerPresses, minute);
+            if (r.status == DoseReminder.Status.MISSED) {
+                status.setText(r.title + ": " + r.message);
+                color = R.color.error;
+            } else if (r.status == DoseReminder.Status.LATE) {
+                status.setText(r.title + ": " + r.message);
+                color = R.color.warning;
+            } else if (today.inhalerPresses >= prescribed) {
+                status.setText(R.string.dose_status_all_taken);
+                color = R.color.success;
+            } else {
+                status.setText(R.string.dose_status_on_track);
+                color = R.color.success;
+            }
+        }
+        status.setTextColor(ContextCompat.getColor(this, color));
+    }
+
+    private void showLatest(SessionEntity latest, String condition) {
+        View card = findViewById(R.id.cardLatest);
+        TextView when = findViewById(R.id.tvLatestWhen);
+        TextView action = findViewById(R.id.tvLatestAction);
+        TextView detail = findViewById(R.id.tvLatestCondition);
+        View open = findViewById(R.id.tvLatestOpen);
+        if (latest == null) {
+            when.setText("");
+            action.setText(R.string.sensor_no_session);
+            action.setTextColor(ContextCompat.getColor(this, R.color.text_high_emphasis));
+            detail.setText(R.string.latest_none_hint);
+            open.setVisibility(View.GONE);
+            card.setOnClickListener(v -> startActivity(new Intent(this, LiveSessionActivity.class)));
+            return;
+        }
+        CareAction care = CareAction.of(latest.riskLevelHigh, latest.recommendation, condition);
+        when.setText(new SimpleDateFormat("MMM d, hh:mm a", Locale.getDefault()).format(new Date(latest.startTimeMillis)));
+        action.setText(care.headline);
+        action.setTextColor(ContextCompat.getColor(this, care == CareAction.HOSPITAL ? R.color.error
+                : care == CareAction.CLINIC ? R.color.warning : R.color.success));
+        detail.setText(condition != null ? condition : AssessmentEngine.CATEGORY_STANDARD);
+        open.setVisibility(View.VISIBLE);
+        card.setOnClickListener(v -> startActivity(new Intent(this, SessionResultActivity.class)
+                .putExtra("sessionId", latest.id)));
+    }
+
+    /** @param days newest first, 14 days: the last 7 and the 7 before them */
+    private void showWeek(List<DailySummary.Day> days, CoughHistory.Result history) {
+        int coughs = 0, previous = 0, coughDays = 0, bpmSum = 0, bpmDays = 0, monitoredDays = 0;
+        for (int i = 0; i < days.size(); i++) {
+            DailySummary.Day d = days.get(i);
+            if (i >= 7) {
+                previous += d.coughs;
+                continue;
+            }
+            coughs += d.coughs;
+            if (d.coughs > 0) coughDays++;
+            if (d.hasData()) monitoredDays++;
+            if (d.averageBpm() > 0) {
+                bpmSum += d.averageBpm();
+                bpmDays++;
+            }
+        }
+        ((TextView) findViewById(R.id.tvWeekCoughs)).setText(String.valueOf(coughs));
+        ((TextView) findViewById(R.id.tvWeekCoughDays)).setText(coughDays + " / 7");
+        // The week's breathing as a pattern only (the estimated rate itself is not shown)
+        ((TextView) findViewById(R.id.tvWeekBreathing)).setText(bpmDays > 0
+                ? BreathingAnalyzer.shortLabel(BreathingAnalyzer.classify(Math.round(bpmSum / (float) bpmDays),
+                        HealthPrefs.loadProfile(this).ageYears).pattern)
+                : "--");
+
+        TextView note = findViewById(R.id.tvWeekNote);
+        int color = R.color.text_medium_emphasis;
+        if (history.persistent) {
+            note.setText(getString(R.string.week_note_persistent, history.spellDays));
+            color = R.color.warning;
+        } else if (monitoredDays == 0) {
+            note.setText(R.string.week_note_no_data);
+        } else if (coughs > previous) {
+            note.setText(getString(R.string.week_note_more, coughs - previous));
+            color = R.color.warning;
+        } else if (coughs < previous) {
+            note.setText(getString(R.string.week_note_fewer, previous - coughs));
+            color = R.color.success;
+        } else {
+            note.setText(R.string.week_note_same);
+        }
+        note.setTextColor(ContextCompat.getColor(this, color));
+    }
+
+    private static String formatDuration(long millis) {
+        long minutes = millis / 60000;
+        return minutes >= 60 ? (minutes / 60) + " h " + (minutes % 60) + " m" : minutes + " min";
     }
 
     private void showProfileMenu(View v) {

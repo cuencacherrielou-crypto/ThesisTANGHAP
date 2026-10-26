@@ -203,53 +203,188 @@
                                     android:alpha="0.8"/>
                                 <ImageView
                                     android:id="@+id/ivDashboardBattery"
-                                    android:layout_width="20dp"
-                                    android:layout_height="20dp"
-                                    android:layout_marginEnd="2dp"
-                                    app:srcCompat="@drawable/ic_battery_full"
-                                    tools:ignore="ContentDescription"/>
+                                    android:layout_width="24dp"
+                                    android:layout_height="24dp"
+                                    android:contentDescription="@string/battery_unknown"
+                                    app:srcCompat="@drawable/ic_battery_unknown"/>
 
-                                <TextView
-                                    android:id="@+id/tvDashboardBattery"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/battery_unknown"
-                                    android:textColor="@color/bg_main"
-                                    android:textSize="15sp"
-                                    android:textStyle="bold"
-                                    tools:text="85%" />
                             </LinearLayout>
+                            <TextView
+                                android:id="@+id/tvBatteryHint"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:textColor="@color/bg_main"
+                                android:textSize="14sp"
+                                android:textStyle="bold"
+                                android:visibility="gone"/>
                         </LinearLayout>
                     </RelativeLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- Chart Section -->
-                <com.google.android.material.card.MaterialCardView
+                <!-- Today: inhaler doses against the prescription, coughs, wheezes, time monitored -->
+                <TextView
                     android:layout_width="match_parent"
-                    android:layout_height="260dp"
-                    android:layout_marginTop="24dp"
-                    app:cardCornerRadius="32dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="28dp"
+                    android:text="Today"
+                    android:textColor="@color/text_high_emphasis"
+                    android:textSize="20sp"
+                    android:textStyle="bold"/>
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardToday"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    app:cardCornerRadius="28dp"
                     app:cardElevation="0dp"
-                    app:cardBackgroundColor="@color/surface_card">
+                    app:cardBackgroundColor="@color/surface_card"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="@color/divider">
                     <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
+                        android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:padding="20dp"
-                        android:baselineAligned="false">
+                        android:padding="20dp">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:baselineAligned="false">
+                            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                                <TextView android:id="@+id/tvTodayDoses" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textColor="@color/text_high_emphasis" android:textSize="28sp" android:textStyle="bold"/>
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Inhaler doses" android:textColor="@color/text_medium_emphasis" android:textSize="13sp"/>
+                            </LinearLayout>
+                            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                                <TextView android:id="@+id/tvTodayCoughs" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textColor="@color/text_high_emphasis" android:textSize="28sp" android:textStyle="bold"/>
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Coughs" android:textColor="@color/text_medium_emphasis" android:textSize="13sp"/>
+                            </LinearLayout>
+                        </LinearLayout>
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:baselineAligned="false" android:layout_marginTop="16dp">
+                            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                                <TextView android:id="@+id/tvTodayWheezes" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textColor="@color/text_high_emphasis" android:textSize="28sp" android:textStyle="bold"/>
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Wheezes" android:textColor="@color/text_medium_emphasis" android:textSize="13sp"/>
+                            </LinearLayout>
+                            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                                <TextView android:id="@+id/tvTodayMonitored" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0 min" android:textColor="@color/text_high_emphasis" android:textSize="28sp" android:textStyle="bold"/>
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Monitored" android:textColor="@color/text_medium_emphasis" android:textSize="13sp"/>
+                            </LinearLayout>
+                        </LinearLayout>
+                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="16dp" android:background="@color/divider"/>
                         <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/pressure_trends"
-                            android:textColor="@color/text_high_emphasis"
-                            android:textStyle="bold"
-                            android:textSize="16sp"/>
-                        <com.github.mikephil.charting.charts.LineChart
-                            android:id="@+id/chartDashboard"
+                            android:id="@+id/tvDoseStatus"
                             android:layout_width="match_parent"
-                            android:layout_height="0dp"
-                            android:layout_weight="1"
-                            android:layout_marginTop="16dp"/>
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:textColor="@color/text_medium_emphasis"
+                            android:textSize="15sp"
+                            android:textStyle="bold"/>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Latest AI assessment: what to do, at a glance; tap for the full result -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="28dp"
+                    android:text="Latest AI assessment"
+                    android:textColor="@color/text_high_emphasis"
+                    android:textSize="20sp"
+                    android:textStyle="bold"/>
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardLatest"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    app:cardCornerRadius="28dp"
+                    app:cardElevation="0dp"
+                    app:cardBackgroundColor="@color/surface_card"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="@color/divider">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+                        <TextView
+                            android:id="@+id/tvLatestWhen"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/text_low_emphasis"
+                            android:textSize="13sp"/>
+                        <TextView
+                            android:id="@+id/tvLatestAction"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="No sessions yet"
+                            android:textColor="@color/text_high_emphasis"
+                            android:textSize="22sp"
+                            android:textStyle="bold"/>
+                        <TextView
+                            android:id="@+id/tvLatestCondition"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Tap the center button to start monitoring."
+                            android:textColor="@color/text_medium_emphasis"
+                            android:textSize="15sp"/>
+                        <TextView
+                            android:id="@+id/tvLatestOpen"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="Tap to see the full result"
+                            android:textColor="@color/accent_teal"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:visibility="gone"/>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Last 7 days compared with the 7 days before -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="28dp"
+                    android:text="Last 7 days"
+                    android:textColor="@color/text_high_emphasis"
+                    android:textSize="20sp"
+                    android:textStyle="bold"/>
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardWeek"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    app:cardCornerRadius="28dp"
+                    app:cardElevation="0dp"
+                    app:cardBackgroundColor="@color/surface_card"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="@color/divider">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:baselineAligned="false">
+                            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                                <TextView android:id="@+id/tvWeekCoughs" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textColor="@color/text_high_emphasis" android:textSize="28sp" android:textStyle="bold"/>
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Coughs" android:textColor="@color/text_medium_emphasis" android:textSize="13sp"/>
+                            </LinearLayout>
+                            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                                <TextView android:id="@+id/tvWeekCoughDays" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0 / 7" android:textColor="@color/text_high_emphasis" android:textSize="28sp" android:textStyle="bold"/>
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Days with cough" android:textColor="@color/text_medium_emphasis" android:textSize="13sp"/>
+                            </LinearLayout>
+                            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                                <TextView android:id="@+id/tvWeekBreathing" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="--" android:textColor="@color/text_high_emphasis" android:textSize="28sp" android:textStyle="bold"/>
+                                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Breathing" android:textColor="@color/text_medium_emphasis" android:textSize="13sp"/>
+                            </LinearLayout>
+                        </LinearLayout>
+                        <TextView
+                            android:id="@+id/tvWeekNote"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:textColor="@color/text_medium_emphasis"
+                            android:textSize="15sp"/>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 

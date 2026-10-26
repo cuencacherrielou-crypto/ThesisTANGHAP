@@ -52,10 +52,12 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:padding="16dp">
+                    <!-- Breathing pattern from the breathing sounds: a label only, no numbers
+                         (inhalation effort and breathing-rate values are hidden for now) -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Respiration &amp; Effort Status"
+                        android:text="Breathing Pattern"
                         android:textColor="@color/text_medium_emphasis"
                         android:textSize="11sp"
                         android:textStyle="bold"
@@ -72,70 +74,29 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Detecting..."
+                            android:text="Listening to breathing..."
                             android:textColor="@color/text_high_emphasis"
                             android:textSize="22sp"
                             android:textStyle="bold"/>
-
-                        <LinearLayout
+                        <TextView
+                            android:id="@+id/tvLiveActuations"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:gravity="end">
-                            <TextView
-                                android:id="@+id/tvBreathingRate"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="-- BPM"
-                                android:textColor="@color/accent_teal"
-                                android:textSize="18sp"
-                                android:textStyle="bold"/>
-                            <TextView
-                                android:id="@+id/tvLiveEffort"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="0.0 kPa"
-                                android:textColor="@color/primary_light"
-                                android:textSize="14sp"
-                                android:textStyle="bold"/>
-                            <TextView
-                                android:id="@+id/tvLiveActuations"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="0 Actuations"
-                                android:textColor="@color/secondary"
-                                android:textSize="12sp"
-                                android:textStyle="bold"/>
-                        </LinearLayout>
+                            android:text="0 Actuations"
+                            android:textColor="@color/secondary"
+                            android:textSize="12sp"
+                            android:textStyle="bold"/>
                     </LinearLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
 
-            <!-- Inhalation Effort Data Monitoring -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="200dp"
-                android:layout_marginBottom="16dp"
-                app:cardCornerRadius="24dp"
-                app:cardElevation="0dp"
-                app:cardBackgroundColor="@color/surface_card"
-                app:strokeWidth="1dp"
-                app:strokeColor="@color/divider">
-                <RelativeLayout android:layout_width="match_parent" android:layout_height="match_parent" android:padding="12dp">
-                    <TextView android:id="@+id/labelBreathing"
-                        android:text="Inhalation Effort (Pressure Waveform)"
-                        android:textColor="@color/primary_light"
-                        android:textStyle="bold"
-                        android:textSize="11sp"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"/>
-                    <com.github.mikephil.charting.charts.LineChart
-                        android:id="@+id/chartBreathingPattern"
+                    <TextView
+                        android:id="@+id/tvBreathingHint"
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:layout_below="@id/labelBreathing"
-                        android:layout_marginTop="4dp"/>
-                </RelativeLayout>
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Breathe normally toward the device."
+                        android:textColor="@color/text_medium_emphasis"
+                        android:textSize="14sp"/>
+                </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
             <!-- Cough Activity -->
@@ -149,7 +110,7 @@
                 app:strokeWidth="1dp"
                 app:strokeColor="@color/divider">
                 <RelativeLayout android:layout_width="match_parent" android:layout_height="match_parent" android:padding="12dp">
-                    <TextView android:id="@+id/labelCough" android:text="Cough Detection (AI confidence %)" android:textColor="@color/error" android:textStyle="bold" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                    <TextView android:id="@+id/labelCough" android:text="Cough Sound Level (microphone %)" android:textColor="@color/error" android:textStyle="bold" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
                     <com.github.mikephil.charting.charts.BarChart android:id="@+id/chartCough" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_below="@id/labelCough" android:layout_marginTop="4dp"/>
                 </RelativeLayout>
             </com.google.android.material.card.MaterialCardView>

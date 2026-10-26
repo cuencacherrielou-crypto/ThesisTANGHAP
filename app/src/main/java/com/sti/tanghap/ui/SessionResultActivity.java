@@ -8,28 +8,25 @@ import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
-import com.github.mikephil.charting.charts.LineChart;
-import com.github.mikephil.charting.components.XAxis;
-import com.github.mikephil.charting.formatter.ValueFormatter;
-import com.github.mikephil.charting.data.Entry;
-import com.github.mikephil.charting.data.LineData;
-import com.github.mikephil.charting.data.LineDataSet;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
 import com.google.firebase.auth.FirebaseAuth;
 import com.sti.tanghap.R;
+import com.sti.tanghap.ai.BreathingAnalyzer;
+import com.sti.tanghap.ai.CareAction;
 import com.sti.tanghap.ai.CoughReview;
+import com.sti.tanghap.ai.PatientProfile;
 import com.sti.tanghap.ai.SavedAssessment;
 import com.sti.tanghap.data.AppDatabase;
 import com.sti.tanghap.data.HealthPrefs;
 import com.sti.tanghap.data.SessionEvent;
+import com.sti.tanghap.domain.CoughHistory;
 import com.sti.tanghap.domain.SessionTimeline;
 import com.sti.tanghap.data.SessionDao;
 import com.sti.tanghap.data.SessionEntity;
 import com.sti.tanghap.data.SessionRepository;
 import com.sti.tanghap.data.SessionStore;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -46,17 +43,17 @@ public class SessionResultActivity extends AppCompatActivity {
     private final SimpleDateFormat sdf = new SimpleDateFormat("MMMM dd, yyyy 'at' hh:mm a", Locale.getDefault());
     private final SimpleDateFormat timeOnly = new SimpleDateFormat("hh:mm a", Locale.getDefault());
 
-    private TextView tvAvgBpm, tvPeak, tvInhaleDur, tvCough, tvAct, tvDate;
+    private TextView tvBreathingPattern, tvCough, tvAct, tvDate;
     private TextView tvAiFindings, tvPossibleCondition, tvAiObservations, tvOtcRecommendation, tvBaselineComparison;
-    private TextView tvTimelineSummary, tvCoughReviewHint, tvBpmTimelineLabel;
+    private TextView tvTimelineSummary, tvCoughReviewHint;
     private LinearLayout timelineContainer;
     /** The session on screen; cough reviews change and save it. */
     private SessionEntity shownSession;
-    private LineChart chartBpmTimeline;
     private View layoutOtc;
+    private View layoutAiHeadline, layoutAiDetails, layoutAiKeyFacts;
+    private TextView tvAiHeadline, tvAiAdvice, tvKeyCoughs, tvKeyWheezes, tvKeyBreathing, btnAiDetails;
     private MaterialButton btnNearbyHospitals;
     private MaterialButton btnCallEmergency;
-    private LineChart chartResultPattern;
     private String currentSessionId;
 
     @Override
@@ -69,9 +66,7 @@ public class SessionResultActivity extends AppCompatActivity {
         toolbar.setNavigationOnClickListener(v -> getOnBackPressedDispatcher().onBackPressed());
 
         // Standard Metrics
-        tvAvgBpm = findViewById(R.id.tvAvgBpm);
-        tvPeak = findViewById(R.id.tvPeak);
-        tvInhaleDur = findViewById(R.id.tvInhaleDur);
+        tvBreathingPattern = findViewById(R.id.tvBreathingPattern);
         tvCough = findViewById(R.id.tvCough);
         tvAct = findViewById(R.id.tvAct);
         tvDate = findViewById(R.id.tvDate);
@@ -83,18 +78,26 @@ public class SessionResultActivity extends AppCompatActivity {
         tvOtcRecommendation = findViewById(R.id.tvOtcRecommendation);
         tvBaselineComparison = findViewById(R.id.tvBaselineComparison);
         layoutOtc = findViewById(R.id.layoutOtc);
+        layoutAiHeadline = findViewById(R.id.layoutAiHeadline);
+        layoutAiDetails = findViewById(R.id.layoutAiDetails);
+        layoutAiKeyFacts = findViewById(R.id.layoutAiKeyFacts);
+        tvAiHeadline = findViewById(R.id.tvAiHeadline);
+        tvAiAdvice = findViewById(R.id.tvAiAdvice);
+        tvKeyCoughs = findViewById(R.id.tvKeyCoughs);
+        tvKeyWheezes = findViewById(R.id.tvKeyWheezes);
+        tvKeyBreathing = findViewById(R.id.tvKeyBreathing);
+        btnAiDetails = findViewById(R.id.btnAiDetails);
+
+        // The headline and key numbers carry the result; the full text is one tap away
+        btnAiDetails.setVisibility(View.VISIBLE);
+        setDetailsShown(false);
+        btnAiDetails.setOnClickListener(v -> setDetailsShown(layoutAiDetails.getVisibility() != View.VISIBLE));
         btnNearbyHospitals = findViewById(R.id.btnNearbyHospitals);
         btnCallEmergency = findViewById(R.id.btnCallEmergency);
 
-        chartResultPattern = findViewById(R.id.chartResultPattern);
-        chartBpmTimeline = findViewById(R.id.chartBpmTimeline);
         tvTimelineSummary = findViewById(R.id.tvTimelineSummary);
         tvCoughReviewHint = findViewById(R.id.tvCoughReviewHint);
         timelineContainer = findViewById(R.id.timelineContainer);
-        tvBpmTimelineLabel = findViewById(R.id.tvBpmTimelineLabel);
-
-        setupChart();
-        setupBpmTimelineChart();
 
         currentSessionId = getIntent().getStringExtra("sessionId");
 
@@ -130,27 +133,6 @@ public class SessionResultActivity extends AppCompatActivity {
         executor.shutdown();
     }
 
-    private void setupChart() {
-        chartResultPattern.getDescription().setEnabled(false);
-        chartResultPattern.getLegend().setEnabled(false);
-        chartResultPattern.getAxisRight().setEnabled(false);
-        XAxis x = chartResultPattern.getXAxis();
-        x.setPosition(XAxis.XAxisPosition.BOTTOM);
-        x.setDrawGridLines(false);
-        x.setTextColor(ContextCompat.getColor(this, R.color.text_low_emphasis));
-        x.setValueFormatter(new ValueFormatter() {
-            @Override
-            public String getFormattedValue(float value) {
-                return String.format(Locale.getDefault(), "%.0fs", value);
-            }
-        });
-        chartResultPattern.getAxisLeft().setDrawGridLines(false);
-        chartResultPattern.getAxisLeft().setDrawLabels(false);
-        chartResultPattern.setTouchEnabled(false);
-        chartResultPattern.setNoDataText("No recorded pressure trace for this session.");
-        chartResultPattern.setNoDataTextColor(ContextCompat.getColor(this, R.color.text_low_emphasis));
-    }
-
     private static String currentUid() {
         return FirebaseAuth.getInstance().getCurrentUser() != null
                 ? FirebaseAuth.getInstance().getCurrentUser().getUid() : null;
@@ -167,9 +149,8 @@ public class SessionResultActivity extends AppCompatActivity {
             SessionEntity session = dao.getByIdForUser(id, uid);
 
             if (session != null) {
-                if (session.baselineComparison == null) {
-                    session.baselineComparison = SessionStore.baselineText(session, SessionStore.baselineFor(dao, session));
-                }
+                // Always rebuilt, so older sessions' saved inhalation-effort comparison is not shown
+                session.baselineComparison = SessionStore.baselineText(session, SessionStore.baselineFor(dao, session));
                 runOnUiThread(() -> showSession(session));
             } else {
                 runOnUiThread(this::showEmptyState);
@@ -182,7 +163,6 @@ public class SessionResultActivity extends AppCompatActivity {
         displaySessionDetails(session);
         displayAiAssessment(session);
         tvBaselineComparison.setText(session.baselineComparison);
-        displayPressureTrace(session);
         displayTimeline(session);
 
         boolean canExport = currentSessionId != null;
@@ -195,15 +175,37 @@ public class SessionResultActivity extends AppCompatActivity {
         tvDate.setText(sdf.format(new Date(session.startTimeMillis))
                 + " to " + timeOnly.format(new Date(session.endTimeMillis))
                 + String.format(Locale.getDefault(), " (%d min %02d s)", durationSec / 60, durationSec % 60));
-        tvPeak.setText(String.format(Locale.getDefault(), "%.1f kPa", session.peakPressureKpa));
-        tvInhaleDur.setText(session.inhaleDurationMillis > 0
-                ? String.format(Locale.getDefault(), "%.2f s", session.inhaleDurationMillis / 1000f)
-                : "-- s");
         tvCough.setText(String.valueOf(session.coughCount));
 
         // Dynamic UI render for Actuations Count
         tvAct.setText(String.valueOf(session.actuationCount));
-        tvAvgBpm.setText(session.averageBpm > 0 ? session.averageBpm + " BPM" : "-- BPM");
+        // Breathing pattern from the breathing sounds; the rate and inhalation effort are not shown
+        tvBreathingPattern.setText(session.detectedPattern != null ? session.detectedPattern : "--");
+    }
+
+    private void setDetailsShown(boolean shown) {
+        layoutAiDetails.setVisibility(shown ? View.VISIBLE : View.GONE);
+        btnAiDetails.setText(shown ? "Hide full details ▴" : "Show full details ▾");
+    }
+
+    /** Large "what to do" headline, colored by urgency, and the session's key facts. */
+    private void displayHeadline(SessionEntity session, String possibleCondition) {
+        CareAction action = CareAction.of(session.riskLevelHigh, session.recommendation, possibleCondition);
+        int color = action == CareAction.HOSPITAL ? R.color.error
+                : action == CareAction.CLINIC ? R.color.warning : R.color.success;
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(ContextCompat.getColor(this, color));
+        bg.setCornerRadius(16 * getResources().getDisplayMetrics().density);
+        layoutAiHeadline.setBackground(bg);
+        layoutAiHeadline.setVisibility(View.VISIBLE);
+        tvAiHeadline.setText(action.headline);
+        tvAiAdvice.setText(action.advice);
+
+        int wheezes = SessionTimeline.ofType(SessionEvent.decode(session.eventLog), SessionEvent.Type.WHEEZE).size();
+        tvKeyCoughs.setText(String.valueOf(session.coughCount));
+        tvKeyWheezes.setText(String.valueOf(wheezes));
+        tvKeyBreathing.setText(BreathingAnalyzer.shortLabel(session.detectedPattern));
+        layoutAiKeyFacts.setVisibility(View.VISIBLE);
     }
 
     private void displayAiAssessment(SessionEntity session) {
@@ -211,9 +213,13 @@ public class SessionResultActivity extends AppCompatActivity {
         tvAiObservations.setText(session.aiObservations != null ? session.aiObservations : "Respiratory rhythm analyzed.");
 
         SavedAssessment saved = SavedAssessment.of(session, HealthPrefs.loadProfile(this));
+        displayHeadline(session, saved.possibleCondition);
         if (saved.possibleCondition != null) {
             tvPossibleCondition.setVisibility(View.VISIBLE);
             tvPossibleCondition.setText(saved.possibleCondition);
+            tvPossibleCondition.setTextColor(ContextCompat.getColor(this,
+                    com.sti.tanghap.ai.AssessmentEngine.CATEGORY_STANDARD.equals(saved.possibleCondition)
+                            ? R.color.text_medium_emphasis : R.color.warning));
         } else {
             tvPossibleCondition.setVisibility(View.GONE);
         }
@@ -237,11 +243,12 @@ public class SessionResultActivity extends AppCompatActivity {
 
     private void showEmptyState() {
         tvDate.setText("No Session Data Available");
-        tvAvgBpm.setText("-- BPM");
-        tvPeak.setText("-- kPa");
-        tvInhaleDur.setText("-- s");
+        tvBreathingPattern.setText("--");
         tvCough.setText("0");
         tvAct.setText("0");
+        layoutAiHeadline.setVisibility(View.GONE);
+        layoutAiKeyFacts.setVisibility(View.GONE);
+        setDetailsShown(true);
         tvAiFindings.setText("Session not found");
         tvAiObservations.setText("This session is not stored on this phone for the signed-in account.");
         tvBaselineComparison.setText("--");
@@ -253,82 +260,16 @@ public class SessionResultActivity extends AppCompatActivity {
         findViewById(R.id.btnExport).setAlpha(0.5f);
     }
 
-    /**
-     * Plots the pressure actually recorded during the session (no synthetic waveform),
-     * placed at the time each point was recorded (seconds from the session start).
-     */
-    private void displayPressureTrace(SessionEntity session) {
-        List<Entry> entries = new ArrayList<>();
-        if (session.pressureTrace != null && !session.pressureTrace.isEmpty()) {
-            String[] parts = session.pressureTrace.split(",");
-            String[] times = session.pressureTraceTimes != null ? session.pressureTraceTimes.split(",") : null;
-            // Older sessions have no time stamps: spread the points evenly over the session
-            boolean timed = times != null && times.length == parts.length;
-            float sessionSec = Math.max(1f, (session.endTimeMillis - session.startTimeMillis) / 1000f);
-            float lastX = -1f;
-            for (int i = 0; i < parts.length; i++) {
-                try {
-                    float x = timed ? Long.parseLong(times[i]) / 1000f : sessionSec * i / parts.length;
-                    if (x < lastX) continue; // the chart needs ascending x values
-                    entries.add(new Entry(x, Float.parseFloat(parts[i])));
-                    lastX = x;
-                } catch (NumberFormatException ignored) {
-                }
-            }
-        }
-
-        if (entries.isEmpty()) {
-            chartResultPattern.clear();
-            return;
-        }
-
-        LineDataSet set = new LineDataSet(entries, "Pressure");
-        set.setColor(ContextCompat.getColor(this, R.color.primary_light));
-        set.setLineWidth(2f);
-        set.setDrawCircles(false);
-        set.setDrawValues(false);
-        set.setDrawFilled(true);
-        set.setFillColor(ContextCompat.getColor(this, R.color.primary_light));
-        set.setFillAlpha(40);
-
-        chartResultPattern.setData(new LineData(set));
-        chartResultPattern.invalidate();
-        chartResultPattern.animateX(800);
-    }
-
     // =========================================================
     // TIME-STAMPED TIMELINE
     // =========================================================
 
-    private void setupBpmTimelineChart() {
-        chartBpmTimeline.getDescription().setEnabled(false);
-        chartBpmTimeline.getLegend().setEnabled(false);
-        chartBpmTimeline.getAxisRight().setEnabled(false);
-        chartBpmTimeline.getAxisLeft().setTextColor(ContextCompat.getColor(this, R.color.text_low_emphasis));
-        chartBpmTimeline.setTouchEnabled(false);
-        chartBpmTimeline.setNoDataText("No breathing-rate readings in this session.");
-        chartBpmTimeline.setNoDataTextColor(ContextCompat.getColor(this, R.color.text_low_emphasis));
-        XAxis x = chartBpmTimeline.getXAxis();
-        x.setPosition(XAxis.XAxisPosition.BOTTOM);
-        x.setDrawGridLines(false);
-        x.setLabelCount(4);
-        x.setTextColor(ContextCompat.getColor(this, R.color.text_low_emphasis));
-    }
-
     private void displayTimeline(SessionEntity session) {
         List<SessionEvent> events = SessionEvent.decode(session.eventLog);
 
-        // Summary: breathing-rate readings, inhalations and data quality
+        // Summary: data quality (breathing-rate and inhalation values are not shown for now)
         StringBuilder summary = new StringBuilder();
-        String rates = SessionTimeline.breathingRateSummary(events);
-        String inhalations = SessionTimeline.inhalationSummary(events);
-        if (rates != null) summary.append("Breathing rate: ").append(rates);
-        if (inhalations != null) {
-            if (summary.length() > 0) summary.append('\n');
-            summary.append("Inhalations: ").append(inhalations);
-        }
         if (session.droppedPackets > 0) {
-            if (summary.length() > 0) summary.append('\n');
             summary.append("Data quality: ").append(session.droppedPackets)
                     .append(session.droppedPackets == 1 ? " sensor packet was" : " sensor packets were")
                     .append(" lost over Bluetooth; readings may be slightly incomplete.");
@@ -336,39 +277,9 @@ public class SessionResultActivity extends AppCompatActivity {
         if (summary.length() == 0) {
             summary.append(events.isEmpty()
                     ? "This session was recorded before time-stamped readings were added."
-                    : "No breathing-rate readings or inhalations were recorded.");
+                    : "Coughs, wheezes and inhaler presses are listed below with their times.");
         }
         tvTimelineSummary.setText(summary);
-
-        // Breathing rate over time, labelled with the clock time
-        List<SessionEvent> bpm = SessionTimeline.ofType(events, SessionEvent.Type.BREATHING_RATE);
-        if (bpm.isEmpty()) {
-            tvBpmTimelineLabel.setVisibility(View.GONE);
-            chartBpmTimeline.setVisibility(View.GONE);
-        } else {
-            tvBpmTimelineLabel.setVisibility(View.VISIBLE);
-            chartBpmTimeline.setVisibility(View.VISIBLE);
-            List<Entry> entries = new ArrayList<>();
-            for (SessionEvent e : bpm) {
-                entries.add(new Entry((e.timeMillis - session.startTimeMillis) / 1000f, e.value));
-            }
-            final long start = session.startTimeMillis;
-            final SimpleDateFormat clock = new SimpleDateFormat("hh:mm a", Locale.getDefault());
-            chartBpmTimeline.getXAxis().setValueFormatter(new ValueFormatter() {
-                @Override
-                public String getFormattedValue(float value) {
-                    return clock.format(new Date(start + Math.round(value * 1000)));
-                }
-            });
-            LineDataSet set = new LineDataSet(entries, "BPM");
-            set.setColor(ContextCompat.getColor(this, R.color.accent_teal));
-            set.setCircleColor(ContextCompat.getColor(this, R.color.accent_teal));
-            set.setCircleRadius(2f);
-            set.setLineWidth(2f);
-            set.setDrawValues(false);
-            chartBpmTimeline.setData(new LineData(set));
-            chartBpmTimeline.invalidate();
-        }
 
         // Coughs, wheezes, inhaler presses and connection events, each with its time.
         // Cough rows can be reviewed: "Not mine" removes a cough, "Count it" adds one back.
@@ -393,7 +304,7 @@ public class SessionResultActivity extends AppCompatActivity {
 
         TextView tv = new TextView(this);
         tv.setText(text);
-        tv.setTextSize(12);
+        tv.setTextSize(14);
         boolean counted = e.type != SessionEvent.Type.COUGH_IGNORED && e.type != SessionEvent.Type.COUGH_REMOVED;
         tv.setTextColor(ContextCompat.getColor(this, counted ? R.color.text_medium_emphasis : R.color.text_low_emphasis));
         tv.setPadding(0, 6, 0, 6);
@@ -403,7 +314,7 @@ public class SessionResultActivity extends AppCompatActivity {
             boolean isCounted = e.type == SessionEvent.Type.COUGH;
             MaterialButton btn = new MaterialButton(this, null, androidx.appcompat.R.attr.borderlessButtonStyle);
             btn.setText(isCounted ? "Not mine" : "Count it");
-            btn.setTextSize(11);
+            btn.setTextSize(13);
             btn.setTextColor(ContextCompat.getColor(this, isCounted ? R.color.error : R.color.accent_teal));
             btn.setOnClickListener(v -> reviewCough(reviewIndex,
                     isCounted ? SessionEvent.Type.COUGH_REMOVED : SessionEvent.Type.COUGH));
@@ -423,10 +334,17 @@ public class SessionResultActivity extends AppCompatActivity {
         List<SessionEvent> events = SessionEvent.decode(session.eventLog);
         if (eventIndex < 0 || eventIndex >= events.size() || !events.get(eventIndex).isCoughEntry()) return;
         events.set(eventIndex, events.get(eventIndex).withType(newType));
-        CoughReview.applyTo(session, events, HealthPrefs.loadProfile(this));
+        PatientProfile profile = HealthPrefs.loadProfile(this);
 
         executor.execute(() -> {
-            AppDatabase.getInstance(this).sessionDao().insert(session);
+            // Earlier sessions' coughs and wheezes decide whether the cough lasts and the wheezing recurs
+            SessionDao dao = AppDatabase.getInstance(this).sessionDao();
+            List<SessionEntity> earlier = dao.getSinceForUser(session.userId,
+                    session.startTimeMillis - CoughHistory.LOOKBACK_MS);
+            CoughReview.applyTo(session, events, profile,
+                    CoughHistory.coughTimesBefore(earlier, session.startTimeMillis),
+                    CoughHistory.wheezeTimesBefore(earlier, session.startTimeMillis));
+            dao.insert(session);
             new SessionRepository(this).uploadSession(session);
             runOnUiThread(() -> {
                 showSession(session);

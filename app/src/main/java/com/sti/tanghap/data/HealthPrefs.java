@@ -15,12 +15,15 @@ import java.util.Map;
 public final class HealthPrefs {
     public static final String HEALTH_PREFS = "TanghapUserPreferences";
     public static final String SESSION_PREFS = "TanghapSessionHistory";
+    /** In SESSION_PREFS: when the device last reported its battery level. */
+    public static final String KEY_LAST_BATTERY_TIME = "last_battery_time";
+    /** In SESSION_PREFS: the low-battery level already notified since the last charge (BatteryAlert). */
+    public static final String KEY_BATTERY_ALERT_LEVEL = "battery_alert_level";
 
     private static final String KEY_SMOKER = "smokes_or_vapes";
     private static final String KEY_HOSPITALIZED = "previously_hospitalized";
     private static final String KEY_BIRTHDAY = "birthday";
     private static final String KEY_AGE = "age";
-    private static final String KEY_COUGH_REFERENCE_DB = "cough_reference_db";
 
     private HealthPrefs() {}
 
@@ -72,18 +75,6 @@ public final class HealthPrefs {
         p.smokesOrVapes = pref.getBoolean(KEY_SMOKER, false);
         p.previouslyHospitalized = pref.getBoolean(KEY_HOSPITALIZED, false);
         return p;
-    }
-
-    /** The user's calibrated cough level in dBFS from the last calibration, or null. */
-    public static Float coughReferenceDb(Context ctx) {
-        SharedPreferences pref = ctx.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE);
-        return pref.contains(KEY_COUGH_REFERENCE_DB) ? pref.getFloat(KEY_COUGH_REFERENCE_DB, 0f) : null;
-    }
-
-    public static void saveCoughReferenceDb(Context ctx, float levelDb) {
-        ctx.getSharedPreferences(HEALTH_PREFS, Context.MODE_PRIVATE).edit()
-                .putFloat(KEY_COUGH_REFERENCE_DB, levelDb)
-                .apply();
     }
 
     /** Removes everything cached for the signed-in user. Call on logout. */
