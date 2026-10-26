@@ -42,17 +42,16 @@ public final class SessionStore {
         return new BaselineCalculator().compute(previous);
     }
 
+    /**
+     * This session's coughs against the previous 7 days. Inhalation effort is not compared for
+     * now: the pressure sensor is not reliable yet, so its values are not shown.
+     */
     public static String baselineText(SessionEntity session, BaselineCalculator.Baseline baseline) {
-        if (baseline.avgPeakPressure <= 0) {
-            return "No sessions with pressure readings in the previous 7 days yet. Establishing baseline...";
+        if (baseline.sessions == 0) {
+            return "No sessions in the previous 7 days yet. Establishing baseline...";
         }
-        if (session.peakPressureKpa <= 0) {
-            return "No inhalation pressure was recorded in this session, so it cannot be compared with your baseline.";
-        }
-        float diff = ((session.peakPressureKpa - baseline.avgPeakPressure) / baseline.avgPeakPressure) * 100;
-        String direction = diff >= 0 ? "stronger" : "weaker";
         return String.format(Locale.getDefault(),
-                "Inhalation effort is %.1f%% %s than your 7-day average baseline (%.1f kPa).",
-                Math.abs(diff), direction, baseline.avgPeakPressure);
+                "%d %s in this session; your 7-day average is %.1f per session.",
+                session.coughCount, session.coughCount == 1 ? "cough" : "coughs", baseline.avgCoughPerSession);
     }
 }

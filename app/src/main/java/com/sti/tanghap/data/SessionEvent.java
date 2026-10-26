@@ -30,13 +30,13 @@ public class SessionEvent {
         /** Pressure packets lost in transmission; value = number of packets. */
         DATA_GAP,
         /**
-         * Cough the model heard that was much quieter than the user's calibrated cough, so it
-         * was most likely someone nearby; not counted. Label = cough type, value = confidence %.
+         * Older sessions only (the nearby-cough filter was removed): a quieter cough that was not
+         * counted. Kept so those saved sessions still load. Label = cough type, value = confidence %.
          */
         COUGH_IGNORED,
         /** Cough the user marked as not theirs on the result screen; not counted. */
         COUGH_REMOVED,
-        /** User's cough level calibrated; value = level in dBFS, label = calibration coughs heard. */
+        /** Older sessions only (cough calibration was removed); value = level in dBFS, label = coughs heard. */
         CALIBRATION
     }
 

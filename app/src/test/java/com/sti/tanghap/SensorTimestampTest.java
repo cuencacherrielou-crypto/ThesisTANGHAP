@@ -68,7 +68,7 @@ public class SensorTimestampTest {
         // 10 samples per packet, one packet every 100 ms -> 10 ms per sample
         float[] quiet = new float[10];
         float[] inhale = new float[10];
-        Arrays.fill(inhale, -3f);
+        for (int i = 0; i < inhale.length; i++) inhale[i] = (i % 2 == 0) ? -3f : -2.9f;
         long time = 1_000;
         t.addSamples(quiet, time);          // t=1000
         t.addSamples(quiet, time += 100);   // t=1100

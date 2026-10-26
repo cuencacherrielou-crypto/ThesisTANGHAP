@@ -36,6 +36,9 @@ public class BleManager {
 
     private static final String TAG = "TANGHAP_BLE";
 
+    /** Bluetooth MAC of the TANGHAP ESP32-WROOM board, used when no device has been selected yet. */
+    public static final String TANGHAP_DEVICE_ADDRESS = "20:50:0D:D3:1D:F2";
+
     private final Context ctx;
     private final BleListener listener;
     private final BluetoothAdapter adapter;
@@ -48,6 +51,9 @@ public class BleManager {
     private BluetoothGattCharacteristic actChar;
     private BluetoothGattCharacteristic batteryChar;
     private BluetoothGattCharacteristic deviceInfoChar;
+
+    // Newer firmware sends the audio losslessly compressed (AB04); older firmware as raw PCM (AB02)
+    private final AudioPacketDecoder audioDecoder = new AudioPacketDecoder();
 
     private final Map<String, BleDeviceItem> scanMap = new ConcurrentHashMap<>();
 
@@ -66,6 +72,9 @@ public class BleManager {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private BluetoothGatt discoveryGatt;
     private boolean discoveryStarted = false;
+
+    // Device we were connected to before; reconnecting to it waits for it instead of timing out
+    private volatile String lastConnectedAddress;
 
 
     // =========================================================
@@ -254,9 +263,12 @@ public class BleManager {
             }
             gatt = null;
         }
+        // First connection: direct (fast). After a drop: autoConnect, so Android keeps waiting and
+        // reconnects as soon as the device is back in range instead of failing after ~30 s.
+        boolean autoConnect = address.equals(lastConnectedAddress);
         gatt = device.connectGatt(
                 ctx,
-                false,
+                autoConnect,
                 gattCallback,
                 BluetoothDevice.TRANSPORT_LE
         );
@@ -283,11 +295,19 @@ public class BleManager {
         @SuppressLint("MissingPermission")
         @Override
         public void onConnectionStateChange(BluetoothGatt g, int status, int newState) {
-            Log.d(TAG, "Connection state changed. Status=" + status + " State=" + newState);
+            Log.d(TAG, "Connection state changed. Status=" + status + " (" + describeStatus(status)
+                    + ") State=" + newState);
 
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 gatt = g;
+                lastConnectedAddress = g.getDevice().getAddress();
                 lastActuationMillis = 0; // Reset debounce timer
+
+                // The audio stream needs a short connection interval; on the default interval the
+                // link backs up and the connection times out even with the device close by
+                if (hasConnectPermission()) {
+                    g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH);
+                }
 
                 synchronized (BleManager.this) {
                     discoveryGatt = g;
@@ -361,7 +381,11 @@ public class BleManager {
             Log.d(TAG, "TANGHAP service found.");
 
             pressureChar = service.getCharacteristic(BleUuids.PRESSURE_STREAM_CHAR);
-            audioChar = service.getCharacteristic(BleUuids.AUDIO_STREAM_CHAR); // Characteristic AB02: microphone audio
+            audioChar = service.getCharacteristic(BleUuids.AUDIO_COMPRESSED_CHAR);
+            if (audioChar == null) audioChar = service.getCharacteristic(BleUuids.AUDIO_STREAM_CHAR); // older firmware: raw PCM
+            Log.d(TAG, "Audio stream: " + (audioChar == null ? "none"
+                    : BleUuids.AUDIO_COMPRESSED_CHAR.equals(audioChar.getUuid()) ? "compressed (AB04)" : "raw PCM (AB02)"));
+            audioDecoder.reset();
             actChar = service.getCharacteristic(BleUuids.ACTUATION_EVENT_CHAR);
             batteryChar = service.getCharacteristic(BleUuids.BATTERY_CHAR);
             deviceInfoChar = service.getCharacteristic(BleUuids.DEVICE_INFO_CHAR);
@@ -405,6 +429,19 @@ public class BleManager {
     };
 
 
+    /** Readable reason for a connection change, so logcat shows why a drop happened. */
+    private static String describeStatus(int status) {
+        switch (status) {
+            case 0: return "OK / disconnect requested";
+            case 8: return "link timeout: out of range, interference or device stopped responding";
+            case 19: return "device ended the connection (ESP32 disconnected or reset)";
+            case 22: return "phone ended the connection";
+            case 62: return "connection could not be established";
+            case 133: return "GATT error (connect failed, try again)";
+            default: return "status " + status;
+        }
+    }
+
     @SuppressLint("MissingPermission")
     private void discoverServicesOnce(BluetoothGatt g) {
         synchronized (this) {
@@ -441,7 +478,22 @@ public class BleManager {
                 listener.onPressureSamples(pkt.sequence, arr);
             }
 
-            // 2. INMP441 AUDIO STREAM DATA (CHARACTERISTIC AB02)
+            // 2. INMP441 AUDIO STREAM DATA (AB04 compressed, or AB02 raw PCM from older firmware)
+        } else if (BleUuids.AUDIO_COMPRESSED_CHAR.equals(uuid)) {
+            byte[] pcm = audioDecoder.decode(value);
+            if (pcm == null) {
+                Log.w(TAG, "Corrupt audio packet ignored (" + (value == null ? 0 : value.length) + " bytes)");
+            } else {
+                int gap = audioDecoder.getLastGapSamples();
+                if (gap > 0) {
+                    long lost = audioDecoder.getLostSamples();
+                    Log.d(TAG, String.format(java.util.Locale.ROOT,
+                            "Audio lost: %d ms (filled); total %.1f%% of %d s",
+                            gap / 16, 100.0 * lost / (lost + audioDecoder.getReceivedSamples()),
+                            (lost + audioDecoder.getReceivedSamples()) / 16000));
+                }
+                listener.onAudioDataReceived(pcm);
+            }
         } else if (BleUuids.AUDIO_STREAM_CHAR.equals(uuid)) {
             if (value != null && value.length > 0) {
                 listener.onAudioDataReceived(value);
@@ -449,7 +501,10 @@ public class BleManager {
 
             // 3. HALL SENSOR / ACTUATION LOGIC
         } else if (BleUuids.ACTUATION_EVENT_CHAR.equals(uuid)) {
-            Log.d(TAG, "ACTUATION NOTIFICATION RECEIVED FROM ESP32!");
+            StringBuilder hex = new StringBuilder();
+            if (value != null) for (byte b : value) hex.append(String.format("%02X ", b));
+            Log.d(TAG, "ACTUATION NOTIFICATION RECEIVED FROM ESP32! len="
+                    + (value == null ? 0 : value.length) + " bytes=" + hex);
 
             long currentPhoneTime = System.currentTimeMillis();
 

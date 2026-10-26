@@ -8,12 +8,19 @@ import static org.junit.Assert.assertTrue;
 import com.sti.tanghap.ai.AssessmentEngine;
 import com.sti.tanghap.ai.BreathingAnalyzer;
 import com.sti.tanghap.ai.CoughClass;
+import com.sti.tanghap.ai.CoughEvidence;
 import com.sti.tanghap.ai.OtcGuidance;
 import com.sti.tanghap.ai.PatientProfile;
 import com.sti.tanghap.ai.SavedAssessment;
 import com.sti.tanghap.data.SessionEntity;
+import com.sti.tanghap.data.SessionEvent;
 
 import org.junit.Test;
+
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /** The medicine shown must match the finding, and conditions are only named as possibilities. */
 public class MedicationAndPossibilityTest {
@@ -22,6 +29,16 @@ public class MedicationAndPossibilityTest {
 
     private AssessmentEngine.AssessmentResult assess(int bpm, CoughClass cough, PatientProfile p) {
         return engine.generatePreliminaryAssessment(BreathingAnalyzer.classify(bpm, p.ageYears), cough, p);
+    }
+
+    /** {@code n} sounds of one type in this session (a condition needs several signs, never one sound). */
+    private AssessmentEngine.AssessmentResult assess(int bpm, int n, CoughClass type, PatientProfile p) {
+        List<SessionEvent> events = new ArrayList<>();
+        SessionEvent.Type t = type == CoughClass.WHEEZING ? SessionEvent.Type.WHEEZE : SessionEvent.Type.COUGH;
+        for (int i = 1; i <= n; i++) events.add(new SessionEvent(10_000L * i, t, 80, type.label));
+        CoughEvidence ev = CoughEvidence.from(events, Collections.emptyList(), Collections.emptyList(),
+                10_000L * (n + 1), ZoneOffset.UTC);
+        return engine.assess(BreathingAnalyzer.classify(bpm, p.ageYears), ev, p);
     }
 
     private static PatientProfile adult() {
@@ -48,7 +65,8 @@ public class MedicationAndPossibilityTest {
     @Test
     public void wetCough_getsExpectorant_notSuppressant() {
         AssessmentEngine.AssessmentResult r = assess(16, CoughClass.WET_COUGH, adult());
-        assertEquals(AssessmentEngine.CATEGORY_BRONCHITIS, r.possibleCondition);
+        // A wet cough alone names no condition, but still gets wet-cough guidance
+        assertEquals(AssessmentEngine.CATEGORY_STANDARD, r.possibleCondition);
         assertEquals(OtcGuidance.WET_COUGH, r.medicineKey);
         assertTrue(r.medicationGuidance.contains("Guaifenesin"));
         assertTrue(r.medicationGuidance.contains("Do not use a cough suppressant"));
@@ -66,7 +84,8 @@ public class MedicationAndPossibilityTest {
 
     @Test
     public void pneumoniaLike_noMedicine_seekCare() {
-        AssessmentEngine.AssessmentResult r = assess(16, CoughClass.SEVERE_COUGH, adult());
+        AssessmentEngine.AssessmentResult r = assess(26, 2, CoughClass.SEVERE_COUGH, adult());
+        assertEquals(AssessmentEngine.CATEGORY_PNEUMONIA, r.possibleCondition);
         assertEquals(OtcGuidance.SEEK_CARE, r.medicineKey);
         assertTrue(r.medicationGuidance.contains("Seek medical care now"));
         assertTrue(r.medicationGuidance.contains("antibiotics"));
@@ -75,7 +94,10 @@ public class MedicationAndPossibilityTest {
 
     @Test
     public void wheeze_getsPrescribedReliever_noOtc() {
-        AssessmentEngine.AssessmentResult r = assess(16, CoughClass.WHEEZING, adult());
+        PatientProfile p = adult();
+        p.hasAsthma = true;
+        AssessmentEngine.AssessmentResult r = assess(16, 2, CoughClass.WHEEZING, p);
+        assertEquals(AssessmentEngine.CATEGORY_ASTHMA, r.possibleCondition);
         assertEquals(OtcGuidance.PRESCRIBED_RELIEVER, r.medicineKey);
         assertTrue(r.medicationGuidance.contains("Never use another person's inhaler"));
         assertFalse(r.recommendPharmacy);
@@ -85,7 +107,8 @@ public class MedicationAndPossibilityTest {
     public void copd_getsActionPlan_noSuppressant() {
         PatientProfile p = adult();
         p.hasCopd = true;
-        AssessmentEngine.AssessmentResult r = assess(16, CoughClass.WET_COUGH, p);
+        AssessmentEngine.AssessmentResult r = assess(22, 3, CoughClass.WET_COUGH, p);   // phlegm + rapid breathing
+        assertEquals(AssessmentEngine.CATEGORY_COPD, r.possibleCondition);
         assertEquals(OtcGuidance.COPD_ACTION_PLAN, r.medicineKey);
         assertTrue(r.medicationGuidance.contains("COPD action plan"));
     }
@@ -163,8 +186,8 @@ public class MedicationAndPossibilityTest {
     @Test
     public void ageChangesBreathingLimits() {
         // 26 BPM is fast for an adult but normal for an 8-year-old (18-30)
-        assertEquals(AssessmentEngine.CATEGORY_PNEUMONIA, assess(26, null, adult()).possibleCondition);
-        AssessmentEngine.AssessmentResult child = assess(26, null, new PatientProfile(8, false, false, false));
+        assertEquals(AssessmentEngine.CATEGORY_PNEUMONIA, assess(26, 2, CoughClass.DRY_COUGH, adult()).possibleCondition);
+        AssessmentEngine.AssessmentResult child = assess(26, 2, CoughClass.DRY_COUGH, new PatientProfile(8, false, false, false));
         assertEquals(AssessmentEngine.CATEGORY_STANDARD, child.possibleCondition);
         assertFalse(child.recommendClinic);
     }
@@ -180,7 +203,7 @@ public class MedicationAndPossibilityTest {
         PatientProfile p = adult();
         p.smokesOrVapes = true;
         p.previouslyHospitalized = true;
-        String obs = String.join(" ", assess(16, CoughClass.WET_COUGH, p).observations);
+        String obs = String.join(" ", assess(16, CoughClass.PERSISTENT_COUGH, p).observations);   // see a doctor
         assertTrue(obs.contains("smokes or vapes"));
         assertTrue(obs.contains("past hospital stay"));
         // Not added when nothing is wrong

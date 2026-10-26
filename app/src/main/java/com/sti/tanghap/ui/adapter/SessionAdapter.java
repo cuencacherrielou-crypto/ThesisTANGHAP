@@ -45,10 +45,9 @@ public class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.ViewHold
         SessionEntity session = sessions.get(position);
         holder.tvDate.setText(sdf.format(new Date(session.startTimeMillis)));
         
-        String pattern = session.detectedPattern != null ? session.detectedPattern : "Normal";
-        String summary = String.format(Locale.getDefault(), "%s | %d BPM | Peak: %.1f kPa", 
-                pattern, session.averageBpm, session.peakPressureKpa);
-        holder.tvSummary.setText(summary);
+        // Breathing pattern and coughs only: breathing-rate and inhalation-effort values are hidden for now
+        String pattern = session.detectedPattern != null ? session.detectedPattern : "Breathing not measured";
+        holder.tvSummary.setText(pattern + " | " + session.coughCount + (session.coughCount == 1 ? " cough" : " coughs"));
         
         // Color code based on pattern
         int color = R.color.success;

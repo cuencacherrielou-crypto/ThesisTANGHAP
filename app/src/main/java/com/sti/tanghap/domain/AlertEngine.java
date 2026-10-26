@@ -27,17 +27,18 @@ public class AlertEngine {
     ) {
         List<Alert> out = new ArrayList<>();
 
-        // Age-based Breathing Pattern Analysis (unknown age = adult range)
+        // Age-based Breathing Pattern Analysis (unknown age = adult range). The rate is estimated
+        // from breathing sounds and only its pattern is shown, never the number.
         if (todayBpm > 0) {
             int[] range = RespiratoryNorms.normalRange(userAge);
             int minBpm = range[0];
             int maxBpm = range[1];
 
             if (todayBpm < minBpm || todayBpm > maxBpm) {
-                String status = todayBpm < minBpm ? "lower" : "higher";
+                String status = todayBpm < minBpm ? "slower" : "faster";
                 out.add(new Alert(
-                        "Breathing rate " + status + " than normal",
-                        "Your average breathing rate of " + todayBpm + " BPM is " + status + " than the typical range for your age (" + minBpm + "-" + maxBpm + " BPM). This is a trend indicator only.",
+                        "Breathing " + status + " than normal",
+                        "Your breathing in your last session sounded " + status + " than is typical for your age. This is a trend indicator only.",
                         "WARN"
                 ));
             }
@@ -64,7 +65,9 @@ public class AlertEngine {
                 && todayInhaleDurationMillis < baseline.avgInhaleDurationMillis * 0.7f) {
             out.add(new Alert(
                     "Shorter inhalation duration",
-                    "Inhalation duration appears lower than usual. This may indicate technique variation. This is a trend indicator only.",
+                    "Your inhalations were shorter than usual. This can happen when breathing in is harder "
+                            + "(for example when the airways are narrowed) or when inhaler technique changes. "
+                            + "This is a trend indicator only, not a diagnosis.",
                     "INFO"
             ));
         }
@@ -73,8 +76,11 @@ public class AlertEngine {
         if (baseline.avgPeakPressure > 0 && todayPeakPressure > 0
                 && todayPeakPressure < baseline.avgPeakPressure * 0.7f) {
             out.add(new Alert(
-                    "Lower peak pressure than baseline",
-                    "Peak inhalation pressure is below your baseline. Consider checking inhaler technique. Trend indicator only.",
+                    "Weaker inhalation than usual",
+                    "Your strongest inhalation was more than 30% weaker than your recent baseline. A weaker "
+                            + "inhalation can be a sign that the airways are narrowed, and it can also come from a "
+                            + "change in inhaler technique. If you also feel short of breath, wheeze or have chest "
+                            + "tightness, contact a healthcare provider. Trend indicator only, not a diagnosis.",
                     "INFO"
             ));
         }

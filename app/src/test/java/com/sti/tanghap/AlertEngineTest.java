@@ -42,7 +42,11 @@ public class AlertEngineTest {
         );
         boolean found = false;
         for (AlertEngine.Alert a : alerts) {
-            if (a.title.toLowerCase().contains("breathing rate")) found = true;
+            if (a.title.equals("Breathing faster than normal")) {
+                found = true;
+                // the rate is estimated from breathing sounds and never shown as a number
+                assertTrue(a.message, !a.message.contains("25") && !a.message.contains("BPM"));
+            }
         }
         assertTrue(found);
     }

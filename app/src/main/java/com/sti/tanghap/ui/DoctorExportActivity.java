@@ -28,6 +28,7 @@ import androidx.core.content.FileProvider;
 import com.google.firebase.auth.FirebaseAuth;
 import com.sti.tanghap.R;
 import com.sti.tanghap.ai.AssessmentEngine;
+import com.sti.tanghap.ai.BreathingAnalyzer;
 import com.sti.tanghap.ai.SavedAssessment;
 import com.sti.tanghap.data.AppDatabase;
 import com.sti.tanghap.data.HealthPrefs;
@@ -36,6 +37,7 @@ import com.sti.tanghap.domain.DailySummary;
 import com.sti.tanghap.domain.SessionTimeline;
 import com.sti.tanghap.data.SessionDao;
 import com.sti.tanghap.data.SessionEntity;
+import com.sti.tanghap.data.SessionStore;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -138,6 +140,10 @@ public class DoctorExportActivity extends AppCompatActivity {
                 } else {
                     SessionEntity s = dao.getByIdForUser(sessionId, uid);
                     if (s != null) sessions.add(s);
+                }
+                // Rebuilt, so older sessions' saved inhalation-effort comparison is not reported
+                for (SessionEntity s : sessions) {
+                    s.baselineComparison = SessionStore.baselineText(s, SessionStore.baselineFor(dao, s));
                 }
             }
 
@@ -300,7 +306,8 @@ public class DoctorExportActivity extends AppCompatActivity {
             }
             canvas.drawText(String.valueOf(d.sessions), 180, y, paint);
             canvas.drawText(String.valueOf(Math.round(d.monitoredMillis / 60000f)), 230, y, paint);
-            canvas.drawText(d.averageBpm() > 0 ? String.valueOf(d.averageBpm()) : "--", 290, y, paint);
+            canvas.drawText(d.averageBpm() > 0 ? BreathingAnalyzer.shortLabel(BreathingAnalyzer.classify(
+                    d.averageBpm(), HealthPrefs.loadProfile(this).ageYears).pattern) : "--", 290, y, paint);
             canvas.drawText(String.valueOf(d.coughs), 345, y, paint);
             canvas.drawText(String.valueOf(d.wheezes), 400, y, paint);
             canvas.drawText(String.valueOf(d.inhalerPresses), 460, y, paint);
@@ -323,7 +330,7 @@ public class DoctorExportActivity extends AppCompatActivity {
         canvas.drawText("Day", MARGIN, y, paint);
         canvas.drawText("Sessions", 180, y, paint);
         canvas.drawText("Minutes", 230, y, paint);
-        canvas.drawText("Avg BPM", 290, y, paint);
+        canvas.drawText("Breathing", 290, y, paint);
         canvas.drawText("Coughs", 345, y, paint);
         canvas.drawText("Wheezes", 400, y, paint);
         canvas.drawText("Presses", 460, y, paint);
@@ -407,13 +414,9 @@ public class DoctorExportActivity extends AppCompatActivity {
         canvas.drawText("Metrics:", MARGIN, y, paint);
         paint.setFakeBoldText(false);
         y += 25;
-        canvas.drawText("- Average Breathing Rate: " + (session.averageBpm > 0 ? session.averageBpm + " BPM" : "not measured"), 70, y, paint);
-        y += 25;
-        canvas.drawText("- Breathing Pattern: " + nonNull(session.detectedPattern), 70, y, paint);
-        y += 25;
-        canvas.drawText("- Peak Inhalation Pressure: " + String.format(Locale.getDefault(), "%.1f kPa", session.peakPressureKpa), 70, y, paint);
-        y += 25;
-        canvas.drawText("- Average Inhalation Duration: " + String.format(Locale.getDefault(), "%.2f seconds", session.inhaleDurationMillis / 1000f), 70, y, paint);
+        // Breathing as a pattern from the breathing sounds only; breathing-rate and inhalation-effort
+        // values are not reported for now
+        canvas.drawText("- Breathing Pattern (from breathing sounds): " + nonNull(session.detectedPattern), 70, y, paint);
         y += 25;
         canvas.drawText("- Cough Events: " + session.coughCount + (session.coughFinding != null ? " (" + session.coughFinding + ")" : ""), 70, y, paint);
         y += 25;
@@ -447,31 +450,10 @@ public class DoctorExportActivity extends AppCompatActivity {
         drawTimeline(session);
     }
 
-    /** Time-stamped readings: summaries, breathing rate per minute, then each key event. */
+    /** Each key event with its time (breathing-rate and inhalation readings are not reported for now). */
     private void drawTimeline(SessionEntity session) {
         List<SessionEvent> events = SessionEvent.decode(session.eventLog);
         if (events.isEmpty()) return;
-
-        StringBuilder summary = new StringBuilder();
-        String rates = SessionTimeline.breathingRateSummary(events);
-        String inhalations = SessionTimeline.inhalationSummary(events);
-        if (rates != null) summary.append("Breathing rate: ").append(rates).append('\n');
-        if (inhalations != null) summary.append("Inhalations: ").append(inhalations).append('\n');
-        if (summary.length() > 0) {
-            y += 15;
-            drawWrappedSection("Session Readings:", summary.toString().trim());
-        }
-
-        SimpleDateFormat clock = new SimpleDateFormat("hh:mm a", Locale.getDefault());
-        List<long[]> perMinute = SessionTimeline.breathingRatePerMinute(events, session.startTimeMillis);
-        if (!perMinute.isEmpty()) {
-            StringBuilder rows = new StringBuilder();
-            for (long[] row : perMinute) {
-                rows.append(clock.format(new Date(row[0]))).append(": ").append(row[1]).append(" BPM\n");
-            }
-            y += 15;
-            drawWrappedSection("Breathing Rate per Minute (average):", rows.toString().trim());
-        }
 
         List<String> lines = SessionTimeline.keyEventLines(events, Locale.getDefault());
         if (!lines.isEmpty()) {
@@ -538,11 +520,9 @@ public class DoctorExportActivity extends AppCompatActivity {
             y += 20;
             paint.setColor(Color.BLACK);
             canvas.drawText(rowFormat.format(new Date(s.startTimeMillis)), MARGIN, y, paint);
-            canvas.drawText(s.averageBpm > 0 ? String.valueOf(s.averageBpm) : "--", 200, y, paint);
-            canvas.drawText(String.format(Locale.getDefault(), "%.1f", s.peakPressureKpa), 260, y, paint);
-            canvas.drawText(String.format(Locale.getDefault(), "%.2f", s.inhaleDurationMillis / 1000f), 330, y, paint);
-            canvas.drawText(String.valueOf(s.coughCount), 410, y, paint);
-            canvas.drawText(String.valueOf(s.actuationCount), 470, y, paint);
+            canvas.drawText(BreathingAnalyzer.shortLabel(s.detectedPattern), 200, y, paint);
+            canvas.drawText(String.valueOf(s.coughCount), 300, y, paint);
+            canvas.drawText(String.valueOf(s.actuationCount), 380, y, paint);
 
             // Possible condition under the row, when there was one
             String condition = SavedAssessment.of(s, null).possibleCondition;
@@ -562,11 +542,9 @@ public class DoctorExportActivity extends AppCompatActivity {
         paint.setTextSize(11);
         paint.setFakeBoldText(true);
         canvas.drawText("Date", MARGIN, y, paint);
-        canvas.drawText("BPM", 200, y, paint);
-        canvas.drawText("Peak kPa", 260, y, paint);
-        canvas.drawText("Inhale s", 330, y, paint);
-        canvas.drawText("Coughs", 410, y, paint);
-        canvas.drawText("Actuations", 470, y, paint);
+        canvas.drawText("Breathing", 200, y, paint);
+        canvas.drawText("Coughs", 300, y, paint);
+        canvas.drawText("Actuations", 380, y, paint);
         y += 6;
         paint.setStrokeWidth(1);
         canvas.drawLine(MARGIN, y, PAGE_WIDTH - MARGIN, y, paint);

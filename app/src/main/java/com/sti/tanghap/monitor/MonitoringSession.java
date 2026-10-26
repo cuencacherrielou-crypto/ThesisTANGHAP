@@ -1,6 +1,8 @@
 package com.sti.tanghap.monitor;
 
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -8,30 +10,39 @@ import android.util.Log;
 import com.google.firebase.auth.FirebaseAuth;
 import com.sti.tanghap.ai.AiCoughClassifier;
 import com.sti.tanghap.ai.AssessmentEngine;
+import com.sti.tanghap.ai.BreathSoundAnalyzer;
 import com.sti.tanghap.ai.BreathingAnalyzer;
 import com.sti.tanghap.ai.CoughClass;
+import com.sti.tanghap.ai.CoughEvidence;
 import com.sti.tanghap.ai.CoughReview;
 import com.sti.tanghap.ai.PatientProfile;
-import com.sti.tanghap.ai.processor.AudioLevel;
+import com.sti.tanghap.ai.processor.CoughDetector;
 import com.sti.tanghap.ai.processor.MfccExtractor;
+import com.sti.tanghap.ai.processor.PcmRingBuffer;
 import com.sti.tanghap.ble.ble.BleDeviceItem;
 import com.sti.tanghap.ble.ble.BleListener;
 import com.sti.tanghap.ble.ble.BleManager;
+import com.sti.tanghap.data.AppDatabase;
 import com.sti.tanghap.data.ConnectionLog;
 import com.sti.tanghap.data.HealthPrefs;
 import com.sti.tanghap.data.SessionEntity;
 import com.sti.tanghap.data.SessionEvent;
 import com.sti.tanghap.data.SessionStore;
+import com.sti.tanghap.domain.BatteryAlert;
+import com.sti.tanghap.domain.CoughHistory;
 import com.sti.tanghap.domain.InhalationTracker;
-import com.sti.tanghap.domain.NearbyCoughFilter;
 import com.sti.tanghap.notify.NotificationHelper;
 import com.sti.tanghap.ui.LiveSessionActivity;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.time.ZoneId;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -54,15 +65,17 @@ public class MonitoringSession implements BleListener {
     /** app_prefs key for the last inhaler this phone connected to (device setting, not user data). */
     public static final String PREF_LAST_DEVICE = "last_device_address";
 
-    // Pressure analysis
-    private static final long BREATH_WINDOW_MS = 30_000;      // BPM is measured over the last 30 s
-    private static final long BPM_SAMPLE_INTERVAL_MS = 5_000; // how often a BPM reading enters the session average
+    // Breathing pattern from the breathing sounds (the pressure sensor is not used for it for now)
+    private static final int LIVE_BREATH_WINDOW_S = 60;   // the live pattern is judged on the last 60 s
+    private static final int LIVE_BREATH_EVERY_S = 5;     // and updated every 5 s of audio
+
+    // Pressure recording
     private static final int MAX_RECORDED_SAMPLES = 200_000;  // memory cap for the stored session trace
     private static final int TRACE_POINTS = 200;              // points saved for the result chart
     /** A sequence jump larger than this means the device restarted its counter, not lost packets. */
     private static final long MAX_PLAUSIBLE_GAP = 10_000;
 
-    // Event log limits (only frequent breathing-rate readings and inhalations are capped)
+    // Event log limits (only frequent inhalation events are capped)
     private static final int MAX_EVENTS = 3000;
     private static final int MAX_INHALATION_EVENTS = 1500;
 
@@ -71,26 +84,50 @@ public class MonitoringSession implements BleListener {
     private static final int CLIP_HOP_BYTES = CLIP_BYTES / 2;             // 1 s step, so a cough on a window edge is still heard whole
     private static final float AUDIO_BYTES_PER_MS = 16_000 * 2 / 1000f;  // 16 kHz x 2 bytes
     private static final long CLIP_HALF_MS = 1000;                        // a clip's event time is its middle
+    private static final float AUDIO_SAMPLES_PER_MS = AUDIO_BYTES_PER_MS / 2;
+    private static final int RECENT_AUDIO_SAMPLES = 6 * MfccExtractor.SAMPLE_RATE; // room for a 3 s cough plus the clip around it
+    private static final int LEVEL_FRAMES_PER_BAR = 5;                    // one sound-level bar per 250 ms
+    private static final float LEVEL_BAR_MIN_DB = -60f;                   // sound level shown as 0% .. 100% for -60 .. 0 dBFS
+    /** Audio kept after a sensed sound in its clip (250 ms), so the model hears how it ends. */
+    static final int CLIP_TAIL_SAMPLES = MfccExtractor.SAMPLE_RATE / 4;
+    /**
+     * Debug builds only: each session's microphone audio, one file per session named by its start
+     * time, for checking the device's sound and testing the cough model on real device audio.
+     */
+    private static final String DEBUG_AUDIO_DIR = "debug_audio";
+    private static final long DEBUG_AUDIO_MAX_BYTES = 5L * 60 * MfccExtractor.SAMPLE_RATE * 2; // 5 min
+    private static final int DEBUG_AUDIO_KEEP = 20;                                          // newest sessions kept
+    /** Debug builds only: how often the raw pressure range is logged, for tuning the inhalation threshold. */
+    private static final long PRESSURE_DEBUG_LOG_MS = 1000;
+    /** Wheezing heard again within this time is the same wheeze, not a new one. */
+    private static final long WHEEZE_REPEAT_MS = 2000;
+    /**
+     * A wheeze is logged only when heard again 2-6 s after an earlier confident wheeze: a real
+     * wheeze lasts and returns with the next breaths, a single airflow noise does not. Under 2 s
+     * apart the two overlapping 2-second windows may hold the same sound, so that does not confirm.
+     */
+    private static final long WHEEZE_CONFIRM_MIN_MS = 2000;
+    private static final long WHEEZE_CONFIRM_MAX_MS = 6000;
 
     // Auto-reconnect after an unexpected Bluetooth drop
     private static final int MAX_RECONNECT_ATTEMPTS = 5;
     private static final long RECONNECT_DELAY_MS = 3000;
     private static final long SLOW_RECONNECT_DELAY_MS = 15_000;
-
-    // Cough calibration
-    private static final long CALIBRATION_TIMEOUT_MS = 30_000;
+    // While the saved device has not answered, scan this long for any TANGHAP board (e.g. a replaced one)
+    private static final long DEVICE_SEARCH_MS = 8000;
+    private boolean searchingForDevice = false;
+    private final Runnable endDeviceSearch = this::endDeviceSearch;
 
     // Live chart history kept so a reopened screen can redraw it
-    private static final int LIVE_PRESSURE_POINTS = 150;
-    private static final int LIVE_COUGH_BARS = 30;
+    private static final int LIVE_SOUND_BARS = 30;
 
     /** What the live screen shows. */
     public static final class Snapshot {
         public long startMillis;
         public boolean connected;
-        public int bpm;
+        /** Breathing pattern from the breathing sounds, and what it means or what to do. */
         public String pattern;
-        public float currentEffortKpa;
+        public String breathingInsight;
         public int actuations;
         public int countedCoughs;
         public String aiLabel;
@@ -106,14 +143,10 @@ public class MonitoringSession implements BleListener {
     public interface Listener {
         void onUpdate(Snapshot snapshot);
 
-        void onPressureSamples(float[] kpaSamples);
-
-        void onCoughBar(int confidencePercent);
+        /** Microphone loudness over the last 250 ms, 0-100. */
+        void onSoundLevel(int levelPercent);
 
         void onMessage(String text);
-
-        /** Asks the user whether to calibrate their cough loudness. */
-        void onCalibrationPrompt(boolean hasPreviousCalibration);
 
         /**
          * The session ended. sessionId is the saved session, or null when nothing was saved
@@ -131,32 +164,31 @@ public class MonitoringSession implements BleListener {
 
     private final Context ctx;
     private final Host host;
-    private final String deviceAddress;
+    // Can change during the session when the saved device is gone and another TANGHAP board answers
+    private volatile String deviceAddress;
     private final Handler main = new Handler(Looper.getMainLooper());
     private Listener listener;
 
     private BleManager ble;
-    private final BreathingAnalyzer breathingAnalyzer = new BreathingAnalyzer();
     private final AssessmentEngine assessmentEngine = new AssessmentEngine();
     private final InhalationTracker inhalationTracker = new InhalationTracker(BreathingAnalyzer.INHALATION_THRESHOLD_KPA);
     private final PatientProfile profile;
     private boolean worseningNotified = false;
     private int reconnectAttempts = 0;
+    private long pressureDebugSinceMillis = 0;
+    private float pressureDebugMin = Float.MAX_VALUE;
+    private float pressureDebugMax = -Float.MAX_VALUE;
+    private double pressureDebugSum = 0;
+    private int pressureDebugCount = 0;
 
     // ---- Main-thread state ----
     private final long sessionStartMillis = System.currentTimeMillis();
     private final String userId;
-    private final ArrayDeque<PressurePacket> pressureWindow = new ArrayDeque<>();
     private float[] recordedSamples = new float[4096];
     /** Estimated time of each recorded sample, in ms from sessionStartMillis. */
     private int[] recordedTimes = new int[4096];
     private int recordedCount = 0;
-    private float maxInhaleEffort = 0.0f;
-    private float currentEffort = 0.0f;
-    private int bpmSum = 0;
-    private int bpmReadings = 0;
-    private long lastBpmReadingMillis = 0;
-    private BreathingAnalyzer.BreathingResult lastBreathing = BreathingAnalyzer.classify(0);
+    private BreathingAnalyzer.BreathingResult lastBreathing;
     private AssessmentEngine.AssessmentResult lastAssessment;
     private long lastSequence = -1;
     private int droppedPackets = 0;
@@ -166,42 +198,41 @@ public class MonitoringSession implements BleListener {
     private Integer batteryPercent = null;
     /** Time-stamped readings and events for this session. */
     private final List<SessionEvent> events = new ArrayList<>();
-    private final ArrayDeque<Float> livePressure = new ArrayDeque<>();
-    private final ArrayDeque<Integer> liveCoughBars = new ArrayDeque<>();
+    private final ArrayDeque<Integer> liveSoundLevels = new ArrayDeque<>();
 
     private int countedCoughs = 0;
     private int totalActuationCount = 0;
     private String aiCoughLabel = "Analyzing respiration pattern...";
     /** Latest counted cough or wheeze the model heard; null until it hears one. */
     private CoughClass predictedCough = null;
+    /** Counted coughs and logged wheezes of the user's earlier sessions, loaded in the background at the start. */
+    private volatile List<Long> priorCoughTimes = Collections.emptyList();
+    private volatile List<Long> priorWheezeTimes = Collections.emptyList();
     private volatile boolean sessionEnding = false;
     private boolean finished = false;
 
     // ---- Audio-thread state (only touched inside audioExecutor) ----
     private final ExecutorService audioExecutor = Executors.newSingleThreadExecutor();
     private AiCoughClassifier coughClassifier;
-    private final boolean modelLoaded;
     private final ByteArrayOutputStream audioWindow = new ByteArrayOutputStream();
     private long lastAudioArrivalMillis = 0;
+    /** Finds cough-like sounds in the microphone stream; the model then decides what each one is. */
+    private final CoughDetector coughDetector = new CoughDetector();
+    private final PcmRingBuffer recentAudio = new PcmRingBuffer(RECENT_AUDIO_SAMPLES);
+    /** Breathing pattern from the same audio stream; told about each counted cough so it skips it. */
+    private final BreathSoundAnalyzer breathSound = new BreathSoundAnalyzer();
+    private long breathSamplesSinceReading = 0;
+    /** Sensed sounds waiting until the audio after them has arrived, so their clip is complete. */
+    private final ArrayDeque<CoughDetector.Cough> pendingSounds = new ArrayDeque<>();
+    private float levelBarMaxDb = CoughDetector.SILENCE_DB;
+    private FileOutputStream debugAudio;
+    private long debugAudioBytes = 0;
+    private int levelBarFrames = 0;
 
-    // ---- Nearby-cough filter (main thread) ----
-    private final Float savedCoughReferenceDb;
-    private final NearbyCoughFilter coughFilter;
-    /** The cough currently being heard across overlapping clips; null between coughs. */
-    private CoughEpisode coughEpisode = null;
-    private boolean lastClipWasWheeze = false;
-    private boolean calibrationPromptPending = false;
-    private boolean calibrationOffered = false;
-
-    private static class PressurePacket {
-        final long arrivalMillis;
-        final float[] samples;
-
-        PressurePacket(long arrivalMillis, float[] samples) {
-            this.arrivalMillis = arrivalMillis;
-            this.samples = samples;
-        }
-    }
+    // ---- Coughs and wheezing (main thread) ----
+    private long lastWheezeEventMillis = Long.MIN_VALUE / 2;
+    /** Times of recent confident wheeze detections still waiting for a confirming one. */
+    private final ArrayDeque<Long> wheezeCandidates = new ArrayDeque<>();
 
     MonitoringSession(Context context, Host host, String deviceAddress) {
         this.ctx = context.getApplicationContext();
@@ -212,9 +243,7 @@ public class MonitoringSession implements BleListener {
 
         // Health profile answers used by the assessment
         profile = HealthPrefs.loadProfile(ctx);
-        // Until the user chooses, the last calibration (if any) filters nearby coughs
-        savedCoughReferenceDb = HealthPrefs.coughReferenceDb(ctx);
-        coughFilter = new NearbyCoughFilter(savedCoughReferenceDb);
+        loadCoughHistory();
 
         AiCoughClassifier classifier = null;
         try {
@@ -224,8 +253,24 @@ public class MonitoringSession implements BleListener {
             aiCoughLabel = "Cough model unavailable";
         }
         coughClassifier = classifier;
-        modelLoaded = classifier != null;
+        lastBreathing = BreathingAnalyzer.fromSounds(
+                new BreathSoundAnalyzer.Result(BreathSoundAnalyzer.State.LISTENING, 0), profile.ageYears);
         lastAssessment = assessmentEngine.generatePreliminaryAssessment(lastBreathing, null, profile);
+    }
+
+    /** Earlier sessions' coughs and wheezes, which decide whether the cough lasts and the wheezing recurs. */
+    private void loadCoughHistory() {
+        if (userId == null) return;
+        new Thread(() -> {
+            try {
+                List<SessionEntity> earlier = AppDatabase.getInstance(ctx).sessionDao()
+                        .getSinceForUser(userId, sessionStartMillis - CoughHistory.LOOKBACK_MS);
+                priorWheezeTimes = CoughHistory.wheezeTimesBefore(earlier, sessionStartMillis);
+                priorCoughTimes = CoughHistory.coughTimesBefore(earlier, sessionStartMillis);
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Loading the cough history failed", e);
+            }
+        }, "cough-history").start();
     }
 
     void start() {
@@ -241,24 +286,12 @@ public class MonitoringSession implements BleListener {
         listener = l;
         if (l == null) return;
         l.onUpdate(snapshot());
-        if (calibrationPromptPending && !sessionEnding) {
-            calibrationPromptPending = false;
-            l.onCalibrationPrompt(savedCoughReferenceDb != null);
-        }
     }
 
-    /** Pressure points currently on the live chart, oldest first (for redrawing a reopened screen). */
-    public float[] recentPressure() {
-        float[] out = new float[livePressure.size()];
+    public int[] recentSoundLevels() {
+        int[] out = new int[liveSoundLevels.size()];
         int i = 0;
-        for (Float f : livePressure) out[i++] = f;
-        return out;
-    }
-
-    public int[] recentCoughBars() {
-        int[] out = new int[liveCoughBars.size()];
-        int i = 0;
-        for (Integer v : liveCoughBars) out[i++] = v;
+        for (Integer v : liveSoundLevels) out[i++] = v;
         return out;
     }
 
@@ -286,9 +319,8 @@ public class MonitoringSession implements BleListener {
         Snapshot s = new Snapshot();
         s.startMillis = sessionStartMillis;
         s.connected = connected;
-        s.bpm = lastBreathing.bpm;
         s.pattern = lastBreathing.pattern;
-        s.currentEffortKpa = currentEffort;
+        s.breathingInsight = lastBreathing.insight;
         s.actuations = totalActuationCount;
         s.countedCoughs = countedCoughs;
         s.aiLabel = aiCoughLabel;
@@ -320,20 +352,28 @@ public class MonitoringSession implements BleListener {
     public void endAndSave() {
         if (sessionEnding) return;
         sessionEnding = true;
+        stopDeviceSearch();
         if (ble != null) ble.disconnect();
-        // Let the audio thread post any clip it is still classifying, then finish on the main thread
-        runOnAudioThread(() -> main.post(this::finishAndSave));
+        // Let the audio thread classify the sounds it still holds and judge the whole session's
+        // breathing, then finish on the main thread
+        runOnAudioThread(() -> {
+            coughDetector.flush(soundCallback);
+            classifyPendingSounds(true);
+            BreathSoundAnalyzer.Result breathing = breathSound.analyzeAll();
+            main.post(() -> finishAndSave(breathing));
+        });
     }
 
     /** Stops recording without saving. */
     public void discard() {
         if (sessionEnding) return;
         sessionEnding = true;
+        stopDeviceSearch();
         if (ble != null) ble.disconnect();
         finish(null, "Session discarded. Nothing was saved.");
     }
 
-    private void finishAndSave() {
+    private void finishAndSave(BreathSoundAnalyzer.Result breathingSounds) {
         long endMillis = System.currentTimeMillis();
 
         // Nothing came from the device: an empty session would only distort history and baselines
@@ -348,12 +388,10 @@ public class MonitoringSession implements BleListener {
             return;
         }
 
-        // A cough still in progress and an unfinished calibration are settled first
-        if (coughEpisode != null) finishCoughEpisode();
-        if (coughFilter.isCalibrating()) finishCalibration();
-
-        int avgBpm = bpmReadings > 0 ? Math.round(bpmSum / (float) bpmReadings) : lastBreathing.bpm;
-        BreathingAnalyzer.BreathingResult sessionBreathing = BreathingAnalyzer.classify(avgBpm, profile.ageYears);
+        // Pattern of the whole session's breathing sounds. Its estimated rate is kept only so the
+        // assessment can be recalculated after a cough review; it is never shown.
+        BreathingAnalyzer.BreathingResult sessionBreathing = BreathingAnalyzer.forSession(breathingSounds, profile.ageYears);
+        int avgBpm = sessionBreathing.bpm;
 
         inhalationTracker.finish();
 
@@ -369,7 +407,8 @@ public class MonitoringSession implements BleListener {
 
         // Cough count, finding and assessment come from the counted coughs in the event log,
         // the same way the result screen recalculates them after a cough review
-        CoughReview.Outcome review = CoughReview.evaluate(events, avgBpm, profile);
+        CoughReview.Outcome review = CoughReview.evaluate(events, avgBpm, profile,
+                priorCoughTimes, priorWheezeTimes, endMillis, ZoneId.systemDefault());
         AssessmentEngine.AssessmentResult assessment = review.assessment;
         String[] trace = buildPressureTrace();
 
@@ -377,7 +416,8 @@ public class MonitoringSession implements BleListener {
         s.userId = userId;
         s.startTimeMillis = sessionStartMillis;
         s.endTimeMillis = endMillis;
-        s.peakPressureKpa = maxInhaleEffort;
+        // Strongest real inhalation, so a single spike, an exhalation or a cough cannot set it
+        s.peakPressureKpa = inhalationTracker.getPeakEffortKpa();
         s.inhaleDurationMillis = inhalationTracker.getAverageInhaleMillis();
         s.averageBpm = avgBpm;
         s.detectedPattern = sessionBreathing.pattern;
@@ -424,6 +464,7 @@ public class MonitoringSession implements BleListener {
         runOnAudioThread(() -> {
             if (coughClassifier != null) coughClassifier.close();
             coughClassifier = null;
+            closeDebugAudio();
         });
         audioExecutor.shutdown();
         if (listener != null) listener.onFinished(sessionId, msg);
@@ -459,7 +500,7 @@ public class MonitoringSession implements BleListener {
 
     /**
      * Coughs, inhaler presses and connection events are always kept so daily totals are complete;
-     * only the frequent breathing-rate readings are capped (the session average still uses all of them).
+     * only frequent breathing-rate readings are capped (none are logged while the rate is hidden).
      */
     private void addEvent(SessionEvent e) {
         if (e.type != SessionEvent.Type.BREATHING_RATE || events.size() < MAX_EVENTS) events.add(e);
@@ -478,35 +519,19 @@ public class MonitoringSession implements BleListener {
     private void handlePressurePacket(long arrival, long sequence, float[] kpaSamples) {
         if (sessionEnding || kpaSamples.length == 0) return;
 
+        logPressureDebug(arrival, kpaSamples);
         trackSequence(arrival, sequence);
+        // Still recorded and saved with the session, but not shown or used for the breathing
+        // pattern for now (the pressure sensor is not reliable yet)
         inhalationTracker.addSamples(kpaSamples, arrival);
-
-        pressureWindow.addLast(new PressurePacket(arrival, kpaSamples));
-        while (pressureWindow.size() > 1 && arrival - pressureWindow.peekFirst().arrivalMillis > BREATH_WINDOW_MS) {
-            pressureWindow.removeFirst();
-        }
 
         // The packet's last sample arrives with it; earlier samples are one sample period apart
         float msPerSample = inhalationTracker.msPerSample();
-        float currentPeak = 0f;
         int n = kpaSamples.length;
         for (int i = 0; i < n; i++) {
-            float val = kpaSamples[i];
-            // Effort is the magnitude, so it works whether inhalation reads as + or - kPa
-            float effort = Math.abs(val);
-            if (effort > currentPeak) currentPeak = effort;
-
             long sampleTime = arrival - Math.round((n - 1 - i) * msPerSample);
-            recordSample(val, sampleTime);
-
-            livePressure.addLast(val);
-            if (livePressure.size() > LIVE_PRESSURE_POINTS) livePressure.removeFirst();
+            recordSample(kpaSamples[i], sampleTime);
         }
-        currentEffort = currentPeak;
-        if (currentPeak > maxInhaleEffort) maxInhaleEffort = currentPeak;
-
-        if (listener != null) listener.onPressureSamples(kpaSamples);
-        runAiAnalysis();
     }
 
     /** Counts packets lost in transmission from gaps in the device's packet counter. */
@@ -538,35 +563,18 @@ public class MonitoringSession implements BleListener {
     // ASSESSMENT (main thread)
     // =========================================================
 
+    /** A new live breathing pattern from the breathing sounds (posted every few seconds of audio). */
+    private void onBreathSounds(BreathSoundAnalyzer.Result result) {
+        if (sessionEnding) return;
+        lastBreathing = BreathingAnalyzer.fromSounds(result, profile.ageYears);
+        runAiAnalysis();
+    }
+
     private void runAiAnalysis() {
-        // Breathing rate over the real time covered by the window
-        int windowSamples = 0;
-        for (PressurePacket p : pressureWindow) windowSamples += p.samples.length;
-        float[] dataArray = new float[windowSamples];
-        int idx = 0;
-        for (PressurePacket p : pressureWindow) {
-            System.arraycopy(p.samples, 0, dataArray, idx, p.samples.length);
-            idx += p.samples.length;
-        }
-        float windowSec = 0f;
-        int windowPackets = pressureWindow.size();
-        if (windowPackets >= 2) {
-            long span = pressureWindow.peekLast().arrivalMillis - pressureWindow.peekFirst().arrivalMillis;
-            windowSec = span / 1000f * windowPackets / (windowPackets - 1);
-        }
-
-        BreathingAnalyzer.BreathingResult br = breathingAnalyzer.analyze(dataArray, windowSec, profile.ageYears);
-        lastBreathing = br;
-
         long now = System.currentTimeMillis();
-        if (br.bpm > 0 && now - lastBpmReadingMillis >= BPM_SAMPLE_INTERVAL_MS) {
-            lastBpmReadingMillis = now;
-            bpmSum += br.bpm;
-            bpmReadings++;
-            addEvent(new SessionEvent(now, SessionEvent.Type.BREATHING_RATE, br.bpm, ""));
-        }
-
-        lastAssessment = assessmentEngine.generatePreliminaryAssessment(br, predictedCough, profile);
+        // The same signs as the saved session: all of this session's coughs and wheezes so far
+        lastAssessment = assessmentEngine.assess(lastBreathing,
+                CoughEvidence.from(events, priorCoughTimes, priorWheezeTimes, now, ZoneId.systemDefault()), profile);
 
         boolean worsening = predictedCough != null && lastAssessment.recommendHospital;
         if (worsening && !worseningNotified) {
@@ -580,141 +588,60 @@ public class MonitoringSession implements BleListener {
         publish();
     }
 
-    /**
-     * Handles one classified 2-second clip. Overlapping clips hear the same cough more than
-     * once, so consecutive cough clips form one cough episode; the episode is decided when
-     * it ends (the next clip without a cough), using its loudest clip and the model's most
-     * confident cough type.
-     */
-    private void onClipClassified(AiCoughClassifier.Result result, long clipTimeMillis, float levelDb) {
+    /** Handles one classified 2-second window of the continuous stream: watches for wheezing. */
+    private void onClipClassified(AiCoughClassifier.Result result, long clipTimeMillis) {
         if (sessionEnding) return;
         clipsClassified++;
-        boolean confident = result.isConfident();
-        boolean coughClip = confident && result.type.isCough;
-        int bar = coughClip ? result.percent() : 0;
-        liveCoughBars.addLast(bar);
-        if (liveCoughBars.size() > LIVE_COUGH_BARS) liveCoughBars.removeFirst();
-        if (listener != null) listener.onCoughBar(bar);
-
-        if (coughClip) {
-            if (coughEpisode == null) coughEpisode = new CoughEpisode(clipTimeMillis);
-            coughEpisode.add(result.type, result.percent(), levelDb);
-        } else if (coughEpisode != null) {
-            finishCoughEpisode();
-        }
-
-        // Wheezing is not loudness-filtered: it is much quieter than a cough
-        boolean wheezeClip = confident && result.type == CoughClass.WHEEZING;
-        if (wheezeClip && !lastClipWasWheeze) {
-            addEvent(new SessionEvent(clipTimeMillis, SessionEvent.Type.WHEEZE, result.percent(), result.type.label));
-        }
-        lastClipWasWheeze = wheezeClip;
-        if (wheezeClip) {
-            predictedCough = CoughClass.WHEEZING;
-            aiCoughLabel = CoughClass.WHEEZING.displayText(result.percent());
-        }
+        if (result.isConfidentWheeze()) onWheezeHeard(result, clipTimeMillis);
         runAiAnalysis();
     }
 
-    /** Decides a finished cough episode: calibration cough, the user's cough, or someone nearby. */
-    private void finishCoughEpisode() {
-        CoughEpisode e = coughEpisode;
-        coughEpisode = null;
-
-        if (coughFilter.isCalibrating()) {
-            // Calibration coughs are made on purpose: they are not symptoms and are not counted
-            if (coughFilter.addCalibrationCough(e.maxLevelDb)) {
-                finishCalibration();
-            } else {
-                aiCoughLabel = "Calibrating: " + coughFilter.calibrationCoughsHeard() + " of "
-                        + NearbyCoughFilter.CALIBRATION_COUGHS + " coughs heard. Please cough again.";
-            }
-            return;
-        }
-
-        if (coughFilter.isFromUser(e.maxLevelDb)) {
-            addEvent(new SessionEvent(e.startMillis, SessionEvent.Type.COUGH, e.bestPercent, e.bestType.label));
+    /**
+     * A sound the microphone sensed, classified by the trained model. It is recorded as a cough
+     * only when a cough type is the top class and the model is at least 60% sure it is a cough
+     * (AiCoughClassifier.MIN_CONFIDENCE); that percentage is shown, with the type from
+     * Result.coughType(). Wheezing is logged only at its own minimum confidence and
+     * confirmation, as in the continuous wheeze check; anything else is not a cough.
+     */
+    private void onSensedSoundClassified(AiCoughClassifier.Result result, long soundTimeMillis) {
+        if (finished) return;
+        if (result.isConfidentCough()) {
+            CoughClass type = result.coughType();
+            addEvent(new SessionEvent(soundTimeMillis, SessionEvent.Type.COUGH, result.coughPercent(), type.label));
             countedCoughs++;
-            predictedCough = e.bestType;
-            aiCoughLabel = e.bestType.displayText(e.bestPercent);
-        } else {
-            addEvent(new SessionEvent(e.startMillis, SessionEvent.Type.COUGH_IGNORED, e.bestPercent, e.bestType.label));
-            aiCoughLabel = "Quieter cough not counted (likely someone nearby)";
+            predictedCough = type;
+            aiCoughLabel = type.displayText(result.coughPercent());
+        } else if (result.isConfidentWheeze()) {
+            onWheezeHeard(result, soundTimeMillis);
         }
+        if (!sessionEnding) runAiAnalysis();
     }
 
-    /** One cough heard across one or more consecutive overlapping clips. */
-    private static final class CoughEpisode {
-        final long startMillis;
-        CoughClass bestType;
-        int bestPercent = -1;
-        float maxLevelDb = AudioLevel.SILENCE_DBFS;
-
-        CoughEpisode(long startMillis) {
-            this.startMillis = startMillis;
+    /** A confident wheeze detection: logged once a second one confirms it (WHEEZE_CONFIRM_*). */
+    private void onWheezeHeard(AiCoughClassifier.Result result, long timeMillis) {
+        boolean confirmed = false;
+        for (long t : wheezeCandidates) {
+            long gap = Math.abs(timeMillis - t);
+            if (gap >= WHEEZE_CONFIRM_MIN_MS && gap <= WHEEZE_CONFIRM_MAX_MS) confirmed = true;
         }
+        wheezeCandidates.addLast(timeMillis);
+        while (wheezeCandidates.size() > 8) wheezeCandidates.removeFirst();
+        if (confirmed) onWheeze(result, timeMillis);
+    }
 
-        void add(CoughClass type, int percent, float levelDb) {
-            if (percent > bestPercent) {
-                bestPercent = percent;
-                bestType = type;
-            }
-            maxLevelDb = Math.max(maxLevelDb, levelDb);
+    private void onWheeze(AiCoughClassifier.Result result, long timeMillis) {
+        if (Math.abs(timeMillis - lastWheezeEventMillis) > WHEEZE_REPEAT_MS) {
+            addEvent(new SessionEvent(timeMillis, SessionEvent.Type.WHEEZE, result.percent(), result.type.label));
         }
+        lastWheezeEventMillis = timeMillis;
+        predictedCough = CoughClass.WHEEZING;
+        aiCoughLabel = CoughClass.WHEEZING.displayText(result.percent());
     }
 
-    // =========================================================
-    // COUGH CALIBRATION (main thread)
-    // =========================================================
-
-    /** The user chose to calibrate now. */
-    public void startCalibration() {
-        if (sessionEnding) return;
-        // A cough already in progress happened before the user was asked to cough
-        if (coughEpisode != null) finishCoughEpisode();
-        coughFilter.startCalibration();
-        aiCoughLabel = "Calibrating: please cough " + NearbyCoughFilter.CALIBRATION_COUGHS + " times now.";
-        main.postDelayed(calibrationTimeout, CALIBRATION_TIMEOUT_MS);
-        publish();
-    }
-
-    /** The user chose to keep the last calibration (already in use). */
-    public void useLastCalibration() {
-        message("Using your last cough calibration.");
-    }
-
-    /** The user skipped calibration: every cough is counted. */
-    public void skipCalibration() {
-        coughFilter.disable();
-        message("Nearby-cough filter is off: every cough will be counted. "
-                + "You can remove coughs that are not yours on the result screen.");
-    }
-
-    private final Runnable calibrationTimeout = this::onCalibrationTimeout;
-
-    private void onCalibrationTimeout() {
-        if (coughFilter.isCalibrating()) {
-            finishCalibration();
-            publish();
-        }
-    }
-
-    private void finishCalibration() {
-        main.removeCallbacks(calibrationTimeout);
-        int heard = coughFilter.calibrationCoughsHeard();
-        if (coughFilter.finishCalibration()) {
-            float level = coughFilter.getReferenceDb();
-            HealthPrefs.saveCoughReferenceDb(ctx, level);
-            addEvent(new SessionEvent(System.currentTimeMillis(), SessionEvent.Type.CALIBRATION,
-                    level, String.valueOf(heard)));
-            aiCoughLabel = "Calibration done. Monitoring your coughs...";
-            message("Cough calibration done.");
-        } else {
-            aiCoughLabel = "Analyzing respiration pattern...";
-            message(coughFilter.getReferenceDb() != null
-                    ? "No cough heard. Using your last cough calibration."
-                    : "No cough heard. Nearby-cough filter is off; review coughs on the result screen.");
-        }
+    private void onSoundLevel(int levelPercent) {
+        liveSoundLevels.addLast(levelPercent);
+        if (liveSoundLevels.size() > LIVE_SOUND_BARS) liveSoundLevels.removeFirst();
+        if (listener != null) listener.onSoundLevel(levelPercent);
     }
 
     // =========================================================
@@ -736,11 +663,161 @@ public class MonitoringSession implements BleListener {
         }
     }
 
-    /** Classifies every 2-second window of the stream, stepping 1 second at a time. */
+    /** Sound levels for the live chart, and each sensed cough-like sound for classification. */
+    private final CoughDetector.Callback soundCallback = new CoughDetector.Callback() {
+        @Override
+        public void onFrameLevel(float levelDb) {
+            levelBarMaxDb = Math.max(levelBarMaxDb, levelDb);
+            if (++levelBarFrames < LEVEL_FRAMES_PER_BAR) return;
+            int percent = Math.round((levelBarMaxDb - LEVEL_BAR_MIN_DB) / -LEVEL_BAR_MIN_DB * 100);
+            final int bar = Math.max(0, Math.min(100, percent));
+            levelBarMaxDb = CoughDetector.SILENCE_DB;
+            levelBarFrames = 0;
+            main.post(() -> onSoundLevel(bar));
+        }
+
+        @Override
+        public void onCough(CoughDetector.Cough sound) {
+            pendingSounds.addLast(sound);
+        }
+    };
+
+    /** Wall-clock time of a stream sample: the newest sample arrived with the latest packet. */
+    private long sampleTimeMillis(long sample) {
+        return lastAudioArrivalMillis - Math.round((recentAudio.totalSamples() - sample) / AUDIO_SAMPLES_PER_MS);
+    }
+
+    /**
+     * First sample of the 2-second clip the model hears for a sensed sound: the clip ends
+     * {@link #CLIP_TAIL_SAMPLES} after the sound, so it is classified right after the sound ends
+     * instead of a second later. On recorded coughs the model's scores were no worse with this
+     * placement than with the sound centred in the clip. A sound too long to fit is centred on
+     * its loudest moment instead.
+     */
+    static long clipStartFor(CoughDetector.Cough sound) {
+        long start = sound.endSample + CLIP_TAIL_SAMPLES - MfccExtractor.CLIP_SAMPLES;
+        return start <= sound.startSample ? start : sound.peakSample - MfccExtractor.CLIP_SAMPLES / 2;
+    }
+
+    /**
+     * Runs the model on each sensed sound's clip as soon as its audio has arrived (at the end of
+     * the session: now, padded with silence).
+     */
+    private void classifyPendingSounds(boolean sessionEnd) {
+        while (!pendingSounds.isEmpty()) {
+            CoughDetector.Cough sound = pendingSounds.peekFirst();
+            long clipStart = clipStartFor(sound);
+            if (!sessionEnd && recentAudio.totalSamples() < clipStart + MfccExtractor.CLIP_SAMPLES) return;
+            pendingSounds.removeFirst();
+            if (coughClassifier == null) continue; // without the model a sound cannot be confirmed as a cough
+
+            long t0 = System.currentTimeMillis();
+            AiCoughClassifier.Result result;
+            try {
+                result = coughClassifier.classify(recentAudio.clip(clipStart, MfccExtractor.CLIP_SAMPLES));
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Cough model failed on a sensed sound", e);
+                continue;
+            }
+            long now = System.currentTimeMillis();
+            Log.d(TAG, "Sensed sound -> " + result.type.label + " (" + result.percent() + "%, cough total "
+                    + result.coughPercent() + "%" + (result.isConfidentCough() ? " -> " + result.coughType().label : "")
+                    + "), model "
+                    + (now - t0) + " ms, " + (now - sampleTimeMillis(sound.endSample)) + " ms after the sound ended");
+            // The breathing pattern skips counted coughs (a cough is not a breath)
+            if (result.isConfidentCough()) breathSound.addCough(sound.startSample);
+            long soundTime = sampleTimeMillis(sound.startSample);
+            main.post(() -> onSensedSoundClassified(result, soundTime));
+        }
+    }
+
+    /**
+     * Debug builds only: once a second, logs the raw kPa range since the last line (tag
+     * "MonitoringSession", filter "PressureDebug"). Suction is negative, so the min is the
+     * strongest inhalation; compare it with the threshold to tune it.
+     */
+    private void logPressureDebug(long arrival, float[] kpaSamples) {
+        if ((ctx.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0) return;
+        for (float v : kpaSamples) {
+            if (v < pressureDebugMin) pressureDebugMin = v;
+            if (v > pressureDebugMax) pressureDebugMax = v;
+            pressureDebugSum += v;
+        }
+        pressureDebugCount += kpaSamples.length;
+        if (arrival - pressureDebugSinceMillis < PRESSURE_DEBUG_LOG_MS) return;
+        Log.d(TAG, String.format(java.util.Locale.US,
+                "PressureDebug n=%d min=%.3f max=%.3f mean=%.3f kPa (inhale threshold -%.2f)",
+                pressureDebugCount, pressureDebugMin, pressureDebugMax,
+                pressureDebugSum / pressureDebugCount, BreathingAnalyzer.INHALATION_THRESHOLD_KPA));
+        pressureDebugSinceMillis = arrival;
+        pressureDebugMin = Float.MAX_VALUE;
+        pressureDebugMax = -Float.MAX_VALUE;
+        pressureDebugSum = 0;
+        pressureDebugCount = 0;
+    }
+
+    /** Debug builds only: keeps the first 5 minutes of the session's microphone audio in app storage. */
+    private void writeDebugAudio(byte[] audioBytes) {
+        if ((ctx.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0) return;
+        if (debugAudioBytes >= DEBUG_AUDIO_MAX_BYTES) return;
+        try {
+            if (debugAudio == null) debugAudio = openDebugAudio();
+            debugAudio.write(audioBytes);
+            debugAudioBytes += audioBytes.length;
+            if (debugAudioBytes >= DEBUG_AUDIO_MAX_BYTES) closeDebugAudio();
+        } catch (IOException e) {
+            Log.w(TAG, "Debug audio recording failed", e);
+            debugAudioBytes = DEBUG_AUDIO_MAX_BYTES;
+            closeDebugAudio();
+        }
+    }
+
+    /** A new file for this session; only the newest {@link #DEBUG_AUDIO_KEEP} sessions are kept. */
+    private FileOutputStream openDebugAudio() throws IOException {
+        File dir = new File(ctx.getFilesDir(), DEBUG_AUDIO_DIR);
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Cannot create " + dir);
+        File[] old = dir.listFiles();
+        if (old != null && old.length >= DEBUG_AUDIO_KEEP) {
+            Arrays.sort(old, (a, b) -> a.getName().compareTo(b.getName()));   // names sort by start time
+            for (int i = 0; i <= old.length - DEBUG_AUDIO_KEEP; i++) old[i].delete();
+        }
+        return new FileOutputStream(new File(dir, "session_" + sessionStartMillis + ".pcm"));
+    }
+
+    private void closeDebugAudio() {
+        if (debugAudio == null) return;
+        try {
+            debugAudio.close();
+        } catch (IOException ignored) {
+        }
+        debugAudio = null;
+    }
+
+
+    /** Feeds the breathing-pattern analysis and posts a new live pattern every LIVE_BREATH_EVERY_S. */
+    private void updateBreathSounds(byte[] audioBytes) {
+        breathSound.addPcm(audioBytes);
+        breathSamplesSinceReading += audioBytes.length / 2;
+        if (breathSamplesSinceReading < (long) LIVE_BREATH_EVERY_S * BreathSoundAnalyzer.SAMPLE_RATE) return;
+        breathSamplesSinceReading = 0;
+        BreathSoundAnalyzer.Result result = breathSound.analyzeRecent(LIVE_BREATH_WINDOW_S);
+        main.post(() -> onBreathSounds(result));
+    }
+
+    /**
+     * Sensed sounds are classified as described in {@link #onSensedSoundClassified}; in addition
+     * every 2-second window of the stream, stepping 1 second at a time, is checked for wheezing.
+     */
     private void processAudio(byte[] audioBytes, long arrivalMillis) {
+        lastAudioArrivalMillis = arrivalMillis;
+        writeDebugAudio(audioBytes);
+        recentAudio.write(audioBytes);
+        coughDetector.process(audioBytes, soundCallback);
+        classifyPendingSounds(false);
+        updateBreathSounds(audioBytes);
+
         if (coughClassifier == null) return;
         audioWindow.write(audioBytes, 0, audioBytes.length);
-        lastAudioArrivalMillis = arrivalMillis;
 
         while (audioWindow.size() >= CLIP_BYTES) {
             byte[] buffered = audioWindow.toByteArray();
@@ -762,9 +839,7 @@ public class MonitoringSession implements BleListener {
                 continue;
             }
 
-            // Loudness is only measured, for the nearby-cough filter; the model got the clip unchanged
-            float levelDb = AudioLevel.peakDbfs(clip);
-            main.post(() -> onClipClassified(result, clipTimeMillis, levelDb));
+            main.post(() -> onClipClassified(result, clipTimeMillis));
         }
     }
 
@@ -799,11 +874,6 @@ public class MonitoringSession implements BleListener {
             lastSequence = -1;
             addEvent(new SessionEvent(connectedAt, SessionEvent.Type.CONNECTED, wasReconnecting ? 1 : 0, deviceName));
             message(wasReconnecting ? "Reconnected to TANGHAP" : "Connected to TANGHAP");
-            if (!calibrationOffered && modelLoaded) {
-                calibrationOffered = true;
-                if (listener != null) listener.onCalibrationPrompt(savedCoughReferenceDb != null);
-                else calibrationPromptPending = true; // asked when the screen is opened
-            }
             publish();
         });
     }
@@ -850,18 +920,80 @@ public class MonitoringSession implements BleListener {
         }
         main.postDelayed(() -> {
             if (sessionEnding || ble == null) return;
+            // Never reached this session: the saved address may belong to an old board (a new ESP32
+            // has a different MAC), so look for whichever TANGHAP device is advertising nearby
+            if (!everConnected && ble.isBluetoothEnabled() && ble.hasScanPermission()) {
+                startDeviceSearch();
+                return;
+            }
             // No attempt started (e.g. Bluetooth off): no callback will come, so retry again
             if (!ble.connect(deviceAddress)) scheduleReconnect();
         }, delay);
     }
 
-    @Override public void onScanResults(List<BleDeviceItem> results) {}
+    private void startDeviceSearch() {
+        searchingForDevice = true;
+        ble.startScan();
+        main.postDelayed(endDeviceSearch, DEVICE_SEARCH_MS);
+    }
+
+    private void stopDeviceSearch() {
+        main.removeCallbacks(endDeviceSearch);
+        if (searchingForDevice && ble != null) ble.stopScan();
+        searchingForDevice = false;
+    }
+
+    /** Nothing found in time: stop scanning and try again later. */
+    private void endDeviceSearch() {
+        if (!searchingForDevice) return;
+        stopDeviceSearch();
+        scheduleReconnect();
+    }
+
+    @Override
+    public void onScanResults(List<BleDeviceItem> results) {
+        main.post(() -> {
+            if (!searchingForDevice || sessionEnding || results.isEmpty()) return;
+            // The saved device if it is advertising, then the known TANGHAP board, otherwise the closest one
+            BleDeviceItem pick = null;
+            BleDeviceItem known = null;
+            for (BleDeviceItem d : results) {
+                if (d.address.equalsIgnoreCase(deviceAddress)) {
+                    pick = d;
+                    known = null;
+                    break;
+                }
+                if (d.address.equalsIgnoreCase(BleManager.TANGHAP_DEVICE_ADDRESS)) known = d;
+                if (pick == null || d.rssi > pick.rssi) pick = d;
+            }
+            if (known != null) pick = known;
+            stopDeviceSearch();
+            if (!pick.address.equalsIgnoreCase(deviceAddress)) {
+                Log.i(TAG, "Saved device " + deviceAddress + " not found; switching to " + pick.address);
+                message("Found TANGHAP device " + pick.address + ". Connecting...");
+                deviceAddress = pick.address;
+            }
+            if (!ble.connect(deviceAddress)) scheduleReconnect();
+        });
+    }
 
     @Override
     public void onBattery(Integer percent) {
-        if (percent == null) return;
-        ctx.getSharedPreferences(HealthPrefs.SESSION_PREFS, Context.MODE_PRIVATE).edit()
-                .putInt("last_battery", percent).apply();
+        if (percent == null || percent > 100) return;
+        android.content.SharedPreferences prefs =
+                ctx.getSharedPreferences(HealthPrefs.SESSION_PREFS, Context.MODE_PRIVATE);
+        // Tell the user to charge the device once at 20% and once more at 10%
+        int announced = prefs.getInt(HealthPrefs.KEY_BATTERY_ALERT_LEVEL, BatteryAlert.LEVEL_NONE);
+        int level = BatteryAlert.toAnnounce(announced, percent);
+        prefs.edit()
+                .putInt("last_battery", percent)
+                .putLong(HealthPrefs.KEY_LAST_BATTERY_TIME, System.currentTimeMillis())
+                .putInt(HealthPrefs.KEY_BATTERY_ALERT_LEVEL, BatteryAlert.remember(announced, percent))
+                .apply();
+        if (level != BatteryAlert.LEVEL_NONE) {
+            NotificationHelper.show(ctx, NotificationHelper.ID_BATTERY, BatteryAlert.title(level),
+                    BatteryAlert.message(level), new Intent(ctx, com.sti.tanghap.ui.DashboardActivity.class));
+        }
         main.post(() -> {
             batteryPercent = percent;
             publish();

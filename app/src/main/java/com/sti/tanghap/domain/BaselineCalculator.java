@@ -7,6 +7,8 @@ public class BaselineCalculator {
         public float avgInhaleDurationMillis;
         public float avgCoughPerSession;
         public float avgActuationPerSession;
+        /** Sessions averaged (0 = no baseline yet). */
+        public int sessions;
     }
     /**
      * Averages over the given sessions. Peak pressure and inhalation duration only count
@@ -35,6 +37,7 @@ public class BaselineCalculator {
             sumAct += s.actuationCount;
         }
         int n = sessions.size();
+        b.sessions = n;
         b.avgPeakPressure = peakCount > 0 ? sumPeak / peakCount : 0f;
         b.avgInhaleDurationMillis = inhaleCount > 0 ? sumInhale / inhaleCount : 0f;
         b.avgCoughPerSession = sumCough / n;

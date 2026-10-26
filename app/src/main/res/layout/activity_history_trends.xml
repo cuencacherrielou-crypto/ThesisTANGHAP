@@ -48,38 +48,6 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Respiratory Rate Trend (BPM) -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardCornerRadius="24dp"
-                app:cardElevation="0dp"
-                app:cardBackgroundColor="@color/surface_card"
-                app:strokeWidth="1dp"
-                app:strokeColor="@color/divider">
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
-                    <TextView android:text="Respiration Rate Trend (BPM)" android:textColor="@color/accent_teal" android:textStyle="bold" android:textSize="12sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
-                    <com.github.mikephil.charting.charts.LineChart android:id="@+id/chartBpmTrend" android:layout_width="match_parent" android:layout_height="180dp" android:layout_marginTop="8dp"/>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- Pressure Trend (kPa) -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardCornerRadius="24dp"
-                app:cardElevation="0dp"
-                app:cardBackgroundColor="@color/surface_card"
-                app:strokeWidth="1dp"
-                app:strokeColor="@color/divider">
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
-                    <TextView android:text="Inhalation Pressure (kPa)" android:textColor="@color/secondary" android:textStyle="bold" android:textSize="12sp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
-                    <com.github.mikephil.charting.charts.LineChart android:id="@+id/chartTrend" android:layout_width="match_parent" android:layout_height="180dp" android:layout_marginTop="8dp"/>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
             <!-- Cough Events History -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"

@@ -17,24 +17,19 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
 import com.github.mikephil.charting.charts.BarChart;
-import com.github.mikephil.charting.charts.LineChart;
 import com.github.mikephil.charting.components.XAxis;
 import com.github.mikephil.charting.data.BarData;
 import com.github.mikephil.charting.data.BarDataSet;
 import com.github.mikephil.charting.data.BarEntry;
-import com.github.mikephil.charting.data.Entry;
-import com.github.mikephil.charting.data.LineData;
-import com.github.mikephil.charting.data.LineDataSet;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
 import com.sti.tanghap.R;
-import com.sti.tanghap.domain.NearbyCoughFilter;
+import com.sti.tanghap.ble.ble.BleManager;
 import com.sti.tanghap.monitor.MonitoringService;
 import com.sti.tanghap.monitor.MonitoringSession;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Live monitoring screen. The recording itself runs in {@link MonitoringService}, so it keeps
@@ -49,7 +44,6 @@ public class LiveSessionActivity extends AppCompatActivity implements Monitoring
     /** How long to wait for a just-started service to create its session. */
     private static final long ATTACH_TIMEOUT_MS = 5_000;
     private static final long ATTACH_RETRY_MS = 100;
-    private static final int LIVE_PRESSURE_POINTS = 150;
     private static final int LIVE_COUGH_BARS = 30;
 
     /** Set on notifications posted during a session: once the session has ended, show Alerts instead. */
@@ -72,17 +66,14 @@ public class LiveSessionActivity extends AppCompatActivity implements Monitoring
     private long attachDeadline = 0;
     private boolean leaving = false;
 
-    private LineChart chartBreathing;
     private BarChart chartCough;
-    private TextView tvBreathingPattern, tvBreathingRate, tvLiveEffort, tvLiveActuations;
+    private TextView tvBreathingPattern, tvBreathingHint, tvLiveActuations;
     private TextView tvAiFindings, tvPossibleCondition, tvAiObservations, tvOtcRecommendation;
     private View layoutOtc;
     private MaterialButton btnNearbyHospitals;
     private MaterialButton btnCallEmergency;
 
-    private LineDataSet breathingDataSet;
     private BarDataSet coughDataSet;
-    private int breathingIndex = 0;
     private final List<BarEntry> coughEntries = new ArrayList<>();
 
     @Override
@@ -125,19 +116,14 @@ public class LiveSessionActivity extends AppCompatActivity implements Monitoring
         btnNearbyHospitals = findViewById(R.id.btnNearbyHospitals);
         btnCallEmergency = findViewById(R.id.btnCallEmergency);
 
-        chartBreathing = findViewById(R.id.chartBreathingPattern);
         chartCough = findViewById(R.id.chartCough);
         tvBreathingPattern = findViewById(R.id.tvBreathingPattern);
-        tvBreathingRate = findViewById(R.id.tvBreathingRate);
-        tvLiveEffort = findViewById(R.id.tvLiveEffort);
+        tvBreathingHint = findViewById(R.id.tvBreathingHint);
         tvLiveActuations = findViewById(R.id.tvLiveActuations);
 
         tvAiFindings.setText("Connecting to your TANGHAP device...");
         tvPossibleCondition.setVisibility(View.GONE);
         tvAiObservations.setText("Waiting for respiratory and acoustic data...");
-        tvLiveEffort.setText("0.0 kPa");
-        tvBreathingRate.setText("-- BPM");
-        tvBreathingPattern.setText("Measuring breathing rate...");
         tvLiveActuations.setText("0 Actuations");
         layoutOtc.setVisibility(View.GONE);
         btnNearbyHospitals.setVisibility(View.GONE);
@@ -153,6 +139,9 @@ public class LiveSessionActivity extends AppCompatActivity implements Monitoring
         String deviceAddress = getIntent().getStringExtra("deviceAddress");
         if (deviceAddress == null || deviceAddress.isEmpty()) {
             deviceAddress = getSharedPreferences("app_prefs", Context.MODE_PRIVATE).getString(PREF_LAST_DEVICE, null);
+        }
+        if (deviceAddress == null || deviceAddress.isEmpty()) {
+            deviceAddress = BleManager.TANGHAP_DEVICE_ADDRESS;
         }
         if (deviceAddress == null || deviceAddress.isEmpty()) {
             Toast.makeText(this, "Scan and select your TANGHAP inhaler first.", Toast.LENGTH_LONG).show();
@@ -208,7 +197,7 @@ public class LiveSessionActivity extends AppCompatActivity implements Monitoring
             return;
         }
         session = s;
-        restoreCharts(s.recentPressure(), s.recentCoughBars());
+        restoreCoughChart(s.recentSoundLevels());
         s.setListener(this);
     }
 
@@ -257,9 +246,9 @@ public class LiveSessionActivity extends AppCompatActivity implements Monitoring
 
     @Override
     public void onUpdate(MonitoringSession.Snapshot s) {
-        tvBreathingRate.setText(s.bpm > 0 ? s.bpm + " BPM" : "-- BPM");
+        // Breathing pattern from the breathing sounds; its rate and the inhalation effort are not shown
         tvBreathingPattern.setText(s.pattern);
-        tvLiveEffort.setText(String.format(Locale.US, "%.1f kPa", s.currentEffortKpa));
+        tvBreathingHint.setText(s.breathingInsight);
         tvLiveActuations.setText(s.actuations + (s.actuations == 1 ? " Actuation" : " Actuations"));
         if (!leaving) tvAiFindings.setText(s.aiLabel);
 
@@ -280,49 +269,22 @@ public class LiveSessionActivity extends AppCompatActivity implements Monitoring
 
         if (getSupportActionBar() != null) {
             String status = s.connected ? "Connected" : "Not connected";
-            if (s.batteryPercent != null) status += " • Battery " + s.batteryPercent + "%";
+            if (s.batteryPercent != null && s.batteryPercent <= com.sti.tanghap.domain.BatteryAlert.LOW_PERCENT) {
+                status += " • Battery low";
+            }
             getSupportActionBar().setSubtitle(status);
         }
     }
 
     @Override
-    public void onPressureSamples(float[] kpaSamples) {
-        for (float v : kpaSamples) addPressurePoint(v);
-        chartBreathing.getData().notifyDataChanged();
-        chartBreathing.notifyDataSetChanged();
-        chartBreathing.setVisibleXRangeMaximum(LIVE_PRESSURE_POINTS);
-        chartBreathing.moveViewToX(breathingIndex);
-        chartBreathing.invalidate();
-    }
-
-    @Override
-    public void onCoughBar(int confidencePercent) {
-        addCoughBar(confidencePercent);
+    public void onSoundLevel(int levelPercent) {
+        addCoughBar(levelPercent);
         refreshCoughChart();
     }
 
     @Override
     public void onMessage(String text) {
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
-    }
-
-    @Override
-    public void onCalibrationPrompt(boolean hasPreviousCalibration) {
-        if (isFinishing() || session == null) return;
-        MonitoringSession s = session;
-        AlertDialog.Builder b = new AlertDialog.Builder(this)
-                .setTitle("Calibrate cough detection")
-                .setMessage("Hold the device the way you will during monitoring, then tap Calibrate and cough "
-                        + NearbyCoughFilter.CALIBRATION_COUGHS + " times.\n\n"
-                        + "This teaches TANGHAP how loud YOUR cough is, so quieter coughs from people "
-                        + "near you are not counted. These test coughs are not counted as symptoms.")
-                .setCancelable(false)
-                .setPositiveButton("Calibrate", (d, w) -> s.startCalibration())
-                .setNegativeButton("Skip", (d, w) -> s.skipCalibration());
-        if (hasPreviousCalibration) {
-            b.setNeutralButton("Use Last", (d, w) -> s.useLastCalibration());
-        }
-        b.show();
     }
 
     @Override
@@ -343,37 +305,21 @@ public class LiveSessionActivity extends AppCompatActivity implements Monitoring
     // =========================================================
 
     private void setupCharts() {
-        breathingDataSet = createLineSet("Pressure", ContextCompat.getColor(this, R.color.primary_light));
-        breathingDataSet.setMode(LineDataSet.Mode.CUBIC_BEZIER);
-        breathingDataSet.setDrawFilled(true);
-        breathingDataSet.setFillAlpha(40);
-        chartBreathing.setData(new LineData(breathingDataSet));
-        styleChart(chartBreathing);
-
         coughDataSet = new BarDataSet(new ArrayList<>(), "Cough");
         coughDataSet.setColor(ContextCompat.getColor(this, R.color.error));
         coughDataSet.setDrawValues(false);
         chartCough.setData(new BarData(coughDataSet));
         styleChart(chartCough);
+        // Fixed 0-100 % scale: an auto-scaled axis makes quiet background look as tall as a cough
+        chartCough.getAxisLeft().setAxisMinimum(0f);
+        chartCough.getAxisLeft().setAxisMaximum(100f);
     }
 
-    /** Redraws the charts from the session's recent history (e.g. after returning to this screen). */
-    private void restoreCharts(float[] pressure, int[] coughBars) {
-        breathingDataSet.clear();
-        breathingIndex = 0;
-        for (float v : pressure) addPressurePoint(v);
-        chartBreathing.getData().notifyDataChanged();
-        chartBreathing.notifyDataSetChanged();
-        chartBreathing.invalidate();
-
+    /** Redraws the sound chart from the session's recent history (e.g. after returning to this screen). */
+    private void restoreCoughChart(int[] coughBars) {
         coughEntries.clear();
         for (int v : coughBars) addCoughBar(v);
         refreshCoughChart();
-    }
-
-    private void addPressurePoint(float v) {
-        breathingDataSet.addEntry(new Entry(breathingIndex++, v));
-        if (breathingDataSet.getEntryCount() > LIVE_PRESSURE_POINTS) breathingDataSet.removeFirst();
     }
 
     private void addCoughBar(int value) {
@@ -389,15 +335,6 @@ public class LiveSessionActivity extends AppCompatActivity implements Monitoring
         chartCough.getData().notifyDataChanged();
         chartCough.notifyDataSetChanged();
         chartCough.invalidate();
-    }
-
-    private LineDataSet createLineSet(String label, int color) {
-        LineDataSet set = new LineDataSet(new ArrayList<>(), label);
-        set.setColor(color);
-        set.setLineWidth(2.5f);
-        set.setDrawCircles(false);
-        set.setDrawValues(false);
-        return set;
     }
 
     private void styleChart(com.github.mikephil.charting.charts.BarLineChartBase<?> chart) {
